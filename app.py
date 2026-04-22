@@ -7,7 +7,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # =========================
-# CONFIG
+# CONFIG APP
 # =========================
 st.set_page_config(page_title="Rubi&Gabi", layout="wide")
 st.title("💰 Rubi&Gabi")
@@ -33,15 +33,29 @@ sheet = client.open_by_url(
 ).sheet1
 
 # =========================
-# FUNÇÃO CARREGAR DADOS
+# LOAD DATA
 # =========================
 def load_data():
     data = sheet.get_all_records()
-    df = pd.DataFrame(data)
-    return df
+    return pd.DataFrame(data)
 
 # =========================
-# INPUT
+# SAVE DATA
+# =========================
+def guardar(d):
+    sheet.append_row([
+        str(d["Pessoa"]),
+        str(d["Tipo"]),
+        str(d["Categoria"]),
+        str(d["Descrição"]),
+        float(d["Valor"]),
+        str(d["Data"]),
+        int(d["Mês"]),
+        int(d["Ano"])
+    ])
+
+# =========================
+# HEADER
 # =========================
 st.subheader("➕ Novo registo")
 
@@ -68,22 +82,7 @@ if tipo == "Despesa":
         descricao = st.text_input("Descrição")
 
 # =========================
-# GUARDAR
-# =========================
-def guardar(d):
-    sheet.append_row([
-        str(d["Pessoa"]),
-        str(d["Tipo"]),
-        str(d["Categoria"]),
-        str(d["Descrição"]),
-        float(d["Valor"]),
-        str(d["Data"]),
-        int(d["Mês"]),
-        int(d["Ano"])
-    ])
-
-# =========================
-# BOTÃO ADICIONAR
+# ADICIONAR
 # =========================
 if st.button("Adicionar"):
 
@@ -103,28 +102,40 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# CARREGAR DADOS
+# DADOS
 # =========================
 df = load_data()
 
 # =========================
-# REMOVER MOVIMENTO
+# REMOVER MOVIMENTO (CORRIGIDO)
 # =========================
 st.subheader("🗑️ Remover movimento")
 
 if not df.empty:
 
-    df_display = df.copy()
-    df_display.insert(0, "ID", range(2, len(df) + 2))  # linha real na sheet
+    # cria cópia com linha real da sheet
+    df["Linha"] = range(2, len(df) + 2)
 
-    st.dataframe(df_display, use_container_width=True)
+    escolha = st.selectbox(
+        "Seleciona o movimento",
+        df.index,
+        format_func=lambda i:
+            f"{df.loc[i, 'Pessoa']} | {df.loc[i, 'Tipo']} | €{df.loc[i, 'Valor']}"
+    )
 
-    linha = st.number_input("Escolhe ID da linha para apagar", min_value=2, step=1)
+    linha_real = int(df.loc[escolha, "Linha"])
 
-    if st.button("Remover"):
-        sheet.delete_rows(int(linha))
-        st.warning("Movimento removido 🗑️")
+    st.dataframe(df.drop(columns=["Linha"]), use_container_width=True)
+
+    if st.button("🗑️ Apagar movimento"):
+
+        sheet.delete_rows(linha_real)
+
+        st.success("Movimento removido 🗑️")
         st.rerun()
+
+else:
+    st.info("Sem dados ainda")
 
 # =========================
 # DASHBOARD
@@ -140,6 +151,7 @@ if not df.empty:
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("📅 Evolução Mensal")
+
     mensal = df.groupby("Mês")["Valor"].sum().reset_index()
 
     fig2 = px.line(mensal, x="Mês", y="Valor", markers=True)
