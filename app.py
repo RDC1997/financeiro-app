@@ -13,18 +13,14 @@ st.set_page_config(
 )
 
 # =========================
-# ESTILO
+# ESTILO MELHORADO
 # =========================
 st.markdown("""
 <style>
-body {
-    background-color: #2b3441;
+body, .stApp {
+    background-color: #2f3a4a;
     color: white;
-}
-
-.stApp {
-    background-color: #2b3441;
-    color: white;
+    font-family: Arial;
 }
 
 h1, h2, h3 {
@@ -32,15 +28,26 @@ h1, h2, h3 {
     color: #38bdf8;
 }
 
-div[data-testid="metric-container"] {
-    background-color: #3a4656;
-    border-radius: 12px;
-    padding: 12px;
-    transition: 0.3s;
+.block-container {
+    padding-top: 1rem;
 }
 
+/* cartões */
+div[data-testid="metric-container"] {
+    background-color: #3e4b5c;
+    border-radius: 14px;
+    padding: 16px;
+}
+
+/* hover leve */
 div[data-testid="metric-container"]:hover {
     transform: scale(1.02);
+    transition: 0.2s;
+}
+
+/* tabela */
+[data-testid="stDataFrame"] {
+    background-color: #3a4656;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -54,42 +61,36 @@ if "data" not in st.session_state:
 # =========================
 # TÍTULO
 # =========================
-st.title("💰 Gestão Rubi&Gabi")
+st.title("💰 Gestão Rubi & Gabi")
+
+st.write("Controlo financeiro simples, rápido e visual 📊")
 
 # =========================
-# INPUT
+# INPUT (UI MELHORADO)
 # =========================
-st.subheader("➕ Novo movimento")
+st.subheader("➕ Adicionar movimento")
 
-# 👤 PESSOA (HORIZONTAL)
-pessoa = st.radio("Pessoa", ["Ruben", "Gabi"], horizontal=True)
+colA, colB = st.columns(2)
 
-# 💰 TIPO (HORIZONTAL)
-tipo = st.radio("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"], horizontal=True)
+with colA:
+    pessoa = st.radio("Pessoa", ["Ruben", "Gabi"], horizontal=True)
+    tipo = st.radio("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"], horizontal=True)
 
 categoria = ""
 descricao = ""
 
-# =========================
-# DESPESA
-# =========================
-if tipo == "Despesa":
+with colB:
+    if tipo == "Despesa":
+        categoria = st.radio(
+            "Categoria",
+            ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"],
+            horizontal=True
+        )
 
-    # 📊 CATEGORIA (HORIZONTAL)
-    categoria = st.radio(
-        "Categoria da Despesa",
-        ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"],
-        horizontal=True
-    )
+        if categoria == "Outros":
+            descricao = st.text_input("Descrição")
 
-    # 📝 DESCRIÇÃO (SÓ SE OUTROS)
-    if categoria == "Outros":
-        descricao = st.text_input("📝 Descrição")
-
-# =========================
-# VALOR + DATA
-# =========================
-valor = st.number_input("Valor (€)", min_value=0.0, step=10.0)
+valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 # =========================
@@ -124,30 +125,42 @@ if not df.empty:
     desp = df[df["Tipo"] == "Despesa"]["Valor"].sum()
     saldo = rend - desp
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    col1.metric("💵 Rendimentos", f"€ {rend:.2f}")
-    col2.metric("🧾 Despesas", f"€ {desp:.2f}")
-    col3.metric("📈 Saldo", f"€ {saldo:.2f}")
+    c1.metric("💵 Rendimentos", f"€ {rend:.2f}")
+    c2.metric("🧾 Despesas", f"€ {desp:.2f}")
+    c3.metric("📈 Saldo", f"€ {saldo:.2f}")
+
+    # =========================
+    # ALERTA INTELIGENTE
+    # =========================
+    if rend > 0:
+        ratio = desp / rend
+
+        if ratio >= 1:
+            st.error("🚨 Gastaste mais do que ganhaste!")
+        elif ratio >= 0.8:
+            st.warning("⚠️ Estás perto do limite (80%)")
+        else:
+            st.success("✅ Finanças equilibradas")
 
 # =========================
-# FILTRO PESSOA
+# FILTRO
 # =========================
 if not df.empty:
-
-    pessoa_sel = st.selectbox("Ver dados de:", ["Todos", "Ruben", "Gabi"])
-
+    pessoa_sel = st.selectbox("Filtrar pessoa:", ["Todos", "Ruben", "Gabi"])
     if pessoa_sel != "Todos":
         df = df[df["Pessoa"] == pessoa_sel]
 
 # =========================
-# GRÁFICO MENSAL
+# GRÁFICO MENSAL (ORDENADO)
 # =========================
 if not df.empty:
 
     st.subheader("📊 Evolução Mensal")
 
     mensal = df.groupby("Mês")["Valor"].sum().reset_index()
+    mensal = mensal.sort_values("Mês")
 
     fig = px.bar(mensal, x="Mês", y="Valor", text="Valor")
     st.plotly_chart(fig, use_container_width=True)
@@ -161,12 +174,7 @@ if not df.empty:
 
     despesas = df[df["Tipo"] == "Despesa"]
 
-    fig2 = px.pie(
-        despesas,
-        values="Valor",
-        names="Categoria"
-    )
-
+    fig2 = px.pie(despesas, values="Valor", names="Categoria")
     st.plotly_chart(fig2, use_container_width=True)
 
 # =========================
