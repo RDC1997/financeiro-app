@@ -20,7 +20,6 @@ st.markdown("""
 body, .stApp {
     background-color: #2f3a4a;
     color: white;
-    font-family: Arial;
 }
 
 h1, h2, h3 {
@@ -32,11 +31,6 @@ div[data-testid="metric-container"] {
     background-color: #3e4b5c;
     border-radius: 14px;
     padding: 16px;
-}
-
-div[data-testid="metric-container"]:hover {
-    transform: scale(1.02);
-    transition: 0.2s;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -116,16 +110,6 @@ if not df.empty:
     c2.metric("🧾 Despesas", f"€ {desp:.2f}")
     c3.metric("📈 Saldo", f"€ {saldo:.2f}")
 
-    if rend > 0:
-        ratio = desp / rend
-
-        if ratio >= 1:
-            st.error("🚨 Gastaste mais do que ganhaste!")
-        elif ratio >= 0.8:
-            st.warning("⚠️ Quase a atingir o limite (80%)")
-        else:
-            st.success("✅ Finanças equilibradas")
-
 # =========================
 # FILTRO
 # =========================
@@ -135,31 +119,53 @@ if not df.empty:
         df = df[df["Pessoa"] == pessoa_sel]
 
 # =========================
-# GRÁFICO MENSAL (FIX 1–12)
+# GRÁFICOS SEPARADOS (NOVA PARTE)
 # =========================
 if not df.empty:
 
-    st.subheader("📊 Evolução Mensal")
+    st.subheader("📊 Evolução Mensal por Pessoa")
 
-    # garantir inteiro
     df["Mês"] = df["Mês"].astype(int)
 
-    mensal = df.groupby("Mês")["Valor"].sum().reset_index()
-    mensal = mensal.sort_values("Mês")
+    col1, col2 = st.columns(2)
 
-    fig = px.bar(
-        mensal,
-        x="Mês",
-        y="Valor",
-        text="Valor"
-    )
+    # ================= RUBEN =================
+    ruben = df[df["Pessoa"] == "Ruben"]
+    if not ruben.empty:
+        mensal_ruben = ruben.groupby("Mês")["Valor"].sum().reset_index()
+        mensal_ruben = mensal_ruben.sort_values("Mês")
 
-    fig.update_xaxes(
-        tickmode="linear",
-        dtick=1
-    )
+        fig_ruben = px.bar(
+            mensal_ruben,
+            x="Mês",
+            y="Valor",
+            text="Valor",
+            title="Ruben"
+        )
 
-    st.plotly_chart(fig, use_container_width=True)
+        fig_ruben.update_xaxes(tickmode="linear", dtick=1)
+
+        with col1:
+            st.plotly_chart(fig_ruben, use_container_width=True)
+
+    # ================= GABI =================
+    gabi = df[df["Pessoa"] == "Gabi"]
+    if not gabi.empty:
+        mensal_gabi = gabi.groupby("Mês")["Valor"].sum().reset_index()
+        mensal_gabi = mensal_gabi.sort_values("Mês")
+
+        fig_gabi = px.bar(
+            mensal_gabi,
+            x="Mês",
+            y="Valor",
+            text="Valor",
+            title="Gabi"
+        )
+
+        fig_gabi.update_xaxes(tickmode="linear", dtick=1)
+
+        with col2:
+            st.plotly_chart(fig_gabi, use_container_width=True)
 
 # =========================
 # DESPESAS
