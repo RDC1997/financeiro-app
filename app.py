@@ -14,7 +14,7 @@ st.set_page_config(page_title="Rubi&Gabi", layout="wide")
 st.title("💰 Rubi&Gabi")
 
 # =========================
-# GOOGLE SHEETS SETUP
+# GOOGLE SHEETS SETUP (CORRIGIDO)
 # =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -22,8 +22,9 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds = Credentials.from_service_account_file(
-    "finance.json",
+# 🔥 AQUI ESTÁ A CORREÇÃO PRINCIPAL
+creds = Credentials.from_service_account_info(
+    st.secrets["google_service_account"],
     scopes=scope
 )
 
