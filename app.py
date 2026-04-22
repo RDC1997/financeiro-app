@@ -7,13 +7,13 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # =========================
-# APP CONFIG
+# CONFIG
 # =========================
 st.set_page_config(page_title="Rubi&Gabi", layout="wide")
 st.title("💰 Rubi&Gabi")
 
 # =========================
-# GOOGLE SHEETS AUTH
+# GOOGLE SHEETS
 # =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -33,10 +33,12 @@ sheet = client.open_by_url(
 ).sheet1
 
 # =========================
-# DATA SESSION
+# FUNÇÃO CARREGAR DADOS
 # =========================
-if "data" not in st.session_state:
-    st.session_state.data = []
+def load_data():
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    return df
 
 # =========================
 # INPUT
@@ -66,7 +68,7 @@ if tipo == "Despesa":
         descricao = st.text_input("Descrição")
 
 # =========================
-# SAVE FUNCTION
+# GUARDAR
 # =========================
 def guardar(d):
     sheet.append_row([
@@ -81,7 +83,7 @@ def guardar(d):
     ])
 
 # =========================
-# BUTTON
+# BOTÃO ADICIONAR
 # =========================
 if st.button("Adicionar"):
 
@@ -96,41 +98,54 @@ if st.button("Adicionar"):
         "Ano": data.year
     }
 
-    st.session_state.data.append(novo)
     guardar(novo)
-
     st.success("Guardado ☁️")
+    st.rerun()
+
+# =========================
+# CARREGAR DADOS
+# =========================
+df = load_data()
+
+# =========================
+# REMOVER MOVIMENTO
+# =========================
+st.subheader("🗑️ Remover movimento")
+
+if not df.empty:
+
+    df_display = df.copy()
+    df_display.insert(0, "ID", range(2, len(df) + 2))  # linha real na sheet
+
+    st.dataframe(df_display, use_container_width=True)
+
+    linha = st.number_input("Escolhe ID da linha para apagar", min_value=2, step=1)
+
+    if st.button("Remover"):
+        sheet.delete_rows(int(linha))
+        st.warning("Movimento removido 🗑️")
+        st.rerun()
 
 # =========================
 # DASHBOARD
 # =========================
-df = pd.DataFrame(st.session_state.data)
-
 if not df.empty:
 
     st.subheader("📊 Visão Geral")
-
     st.metric("Total", f"€ {df['Valor'].sum():.2f}")
 
     st.subheader("⚖️ Ruben vs Gabi")
-
     fig = px.bar(df.groupby("Pessoa")["Valor"].sum().reset_index(),
                  x="Pessoa", y="Valor", text="Valor")
-
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("📅 Evolução Mensal")
-
     mensal = df.groupby("Mês")["Valor"].sum().reset_index()
 
     fig2 = px.line(mensal, x="Mês", y="Valor", markers=True)
     fig2.update_xaxes(dtick=1)
 
     st.plotly_chart(fig2, use_container_width=True)
-
-    st.subheader("📋 Histórico")
-
-    st.dataframe(df, use_container_width=True)
 
 else:
     st.info("Sem dados ainda")
