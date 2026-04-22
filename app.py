@@ -7,14 +7,13 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # =========================
-# CONFIG APP
+# APP CONFIG
 # =========================
 st.set_page_config(page_title="Rubi&Gabi", layout="wide")
-
 st.title("💰 Rubi&Gabi")
 
 # =========================
-# GOOGLE SHEETS SETUP
+# GOOGLE SHEETS AUTH
 # =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -22,7 +21,6 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# 🔐 GOOGLE AUTH VIA STREAMLIT SECRETS
 creds = Credentials.from_service_account_info(
     st.secrets["google_service_account"],
     scopes=scope
@@ -30,19 +28,18 @@ creds = Credentials.from_service_account_info(
 
 client = gspread.authorize(creds)
 
-# ✅ FIX PRINCIPAL: ABRIR POR URL (não por nome)
 sheet = client.open_by_url(
     "https://docs.google.com/spreadsheets/d/1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME/edit"
 ).sheet1
 
 # =========================
-# SESSION DATA
+# DATA SESSION
 # =========================
 if "data" not in st.session_state:
     st.session_state.data = []
 
 # =========================
-# INPUT FORM
+# INPUT
 # =========================
 st.subheader("➕ Novo registo")
 
@@ -59,7 +56,6 @@ with col2:
 categoria = ""
 descricao = ""
 
-# 👉 só aparece se for despesa
 if tipo == "Despesa":
     categoria = st.selectbox(
         "Categoria",
@@ -70,22 +66,22 @@ if tipo == "Despesa":
         descricao = st.text_input("Descrição")
 
 # =========================
-# FUNÇÃO GOOGLE SHEETS
+# SAVE FUNCTION
 # =========================
 def guardar(d):
     sheet.append_row([
-        d["Pessoa"],
-        d["Tipo"],
-        d["Categoria"],
-        d["Descrição"],
-        d["Valor"],
+        str(d["Pessoa"]),
+        str(d["Tipo"]),
+        str(d["Categoria"]),
+        str(d["Descrição"]),
+        float(d["Valor"]),
         str(d["Data"]),
-        d["Mês"],
-        d["Ano"]
+        int(d["Mês"]),
+        int(d["Ano"])
     ])
 
 # =========================
-# BOTÃO ADICIONAR
+# BUTTON
 # =========================
 if st.button("Adicionar"):
 
@@ -106,35 +102,23 @@ if st.button("Adicionar"):
     st.success("Guardado ☁️")
 
 # =========================
-# DATAFRAME
+# DASHBOARD
 # =========================
 df = pd.DataFrame(st.session_state.data)
 
-# =========================
-# DASHBOARD
-# =========================
 if not df.empty:
 
     st.subheader("📊 Visão Geral")
 
-    total = df["Valor"].sum()
+    st.metric("Total", f"€ {df['Valor'].sum():.2f}")
 
-    col1, col2 = st.columns(2)
-    col1.metric("Total", f"€ {total:.2f}")
-
-    # =========================
-    # RUBEN VS GABI
-    # =========================
     st.subheader("⚖️ Ruben vs Gabi")
 
-    comp = df.groupby("Pessoa")["Valor"].sum().reset_index()
+    fig = px.bar(df.groupby("Pessoa")["Valor"].sum().reset_index(),
+                 x="Pessoa", y="Valor", text="Valor")
 
-    fig = px.bar(comp, x="Pessoa", y="Valor", text="Valor")
     st.plotly_chart(fig, use_container_width=True)
 
-    # =========================
-    # EVOLUÇÃO MENSAL
-    # =========================
     st.subheader("📅 Evolução Mensal")
 
     mensal = df.groupby("Mês")["Valor"].sum().reset_index()
@@ -144,9 +128,6 @@ if not df.empty:
 
     st.plotly_chart(fig2, use_container_width=True)
 
-    # =========================
-    # HISTÓRICO
-    # =========================
     st.subheader("📋 Histórico")
 
     st.dataframe(df, use_container_width=True)
