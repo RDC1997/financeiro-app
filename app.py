@@ -14,7 +14,7 @@ st.set_page_config(page_title="Rubi&Gabi", layout="wide")
 st.title("💰 Rubi&Gabi")
 
 # =========================
-# GOOGLE SHEETS SETUP (CORRIGIDO)
+# GOOGLE SHEETS SETUP
 # =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -22,14 +22,18 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# 🔥 AQUI ESTÁ A CORREÇÃO PRINCIPAL
+# 🔐 GOOGLE AUTH VIA STREAMLIT SECRETS
 creds = Credentials.from_service_account_info(
     st.secrets["google_service_account"],
     scopes=scope
 )
 
 client = gspread.authorize(creds)
-sheet = client.open("Financeiro Rubi&Gabi").sheet1
+
+# ✅ FIX PRINCIPAL: ABRIR POR URL (não por nome)
+sheet = client.open_by_url(
+    "https://docs.google.com/spreadsheets/d/1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME/edit"
+).sheet1
 
 # =========================
 # SESSION DATA
@@ -55,7 +59,7 @@ with col2:
 categoria = ""
 descricao = ""
 
-# 👉 só mostra categoria se for despesa
+# 👉 só aparece se for despesa
 if tipo == "Despesa":
     categoria = st.selectbox(
         "Categoria",
@@ -81,7 +85,7 @@ def guardar(d):
     ])
 
 # =========================
-# ADD BUTTON
+# BOTÃO ADICIONAR
 # =========================
 if st.button("Adicionar"):
 
@@ -107,7 +111,7 @@ if st.button("Adicionar"):
 df = pd.DataFrame(st.session_state.data)
 
 # =========================
-# VISÃO GERAL
+# DASHBOARD
 # =========================
 if not df.empty:
 
@@ -129,7 +133,7 @@ if not df.empty:
     st.plotly_chart(fig, use_container_width=True)
 
     # =========================
-    # GRÁFICO MENSAL
+    # EVOLUÇÃO MENSAL
     # =========================
     st.subheader("📅 Evolução Mensal")
 
@@ -141,7 +145,7 @@ if not df.empty:
     st.plotly_chart(fig2, use_container_width=True)
 
     # =========================
-    # TABELA
+    # HISTÓRICO
     # =========================
     st.subheader("📋 Histórico")
 
