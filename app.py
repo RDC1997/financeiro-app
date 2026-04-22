@@ -7,13 +7,13 @@ from datetime import datetime
 # CONFIG
 # =========================
 st.set_page_config(
-    page_title="Gestão Rubi&Gabi",
+    page_title="Rubi&Gabi",
     page_icon="💰",
     layout="wide"
 )
 
 # =========================
-# ESTILO MELHORADO
+# ESTILO
 # =========================
 st.markdown("""
 <style>
@@ -28,26 +28,15 @@ h1, h2, h3 {
     color: #38bdf8;
 }
 
-.block-container {
-    padding-top: 1rem;
-}
-
-/* cartões */
 div[data-testid="metric-container"] {
     background-color: #3e4b5c;
     border-radius: 14px;
     padding: 16px;
 }
 
-/* hover leve */
 div[data-testid="metric-container"]:hover {
     transform: scale(1.02);
     transition: 0.2s;
-}
-
-/* tabela */
-[data-testid="stDataFrame"] {
-    background-color: #3a4656;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -59,16 +48,13 @@ if "data" not in st.session_state:
     st.session_state.data = []
 
 # =========================
-# TÍTULO
+# TÍTULO (ALTERADO)
 # =========================
-st.title("💰 Gestão Rubi & Gabi")
-
-st.write("Controlo financeiro simples, rápido e visual 📊")
+st.title("💰 Rubi&Gabi")
 
 # =========================
-# INPUT (UI MELHORADO)
+# INPUT (SEM TÍTULO EXTRA)
 # =========================
-st.subheader("➕ Adicionar movimento")
 
 colA, colB = st.columns(2)
 
@@ -94,7 +80,7 @@ valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 # =========================
-# ADICIONAR
+# ADICIONAR (SEM TEXTO VISUAL)
 # =========================
 if st.button("Adicionar"):
     st.session_state.data.append({
@@ -131,16 +117,13 @@ if not df.empty:
     c2.metric("🧾 Despesas", f"€ {desp:.2f}")
     c3.metric("📈 Saldo", f"€ {saldo:.2f}")
 
-    # =========================
-    # ALERTA INTELIGENTE
-    # =========================
     if rend > 0:
         ratio = desp / rend
 
         if ratio >= 1:
             st.error("🚨 Gastaste mais do que ganhaste!")
         elif ratio >= 0.8:
-            st.warning("⚠️ Estás perto do limite (80%)")
+            st.warning("⚠️ Quase a atingir o limite (80%)")
         else:
             st.success("✅ Finanças equilibradas")
 
@@ -148,12 +131,12 @@ if not df.empty:
 # FILTRO
 # =========================
 if not df.empty:
-    pessoa_sel = st.selectbox("Filtrar pessoa:", ["Todos", "Ruben", "Gabi"])
+    pessoa_sel = st.selectbox("Filtrar:", ["Todos", "Ruben", "Gabi"])
     if pessoa_sel != "Todos":
         df = df[df["Pessoa"] == pessoa_sel]
 
 # =========================
-# GRÁFICO MENSAL (ORDENADO)
+# GRÁFICO
 # =========================
 if not df.empty:
 
