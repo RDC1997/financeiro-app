@@ -1,91 +1,188 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-
-st.set_page_config(page_title="Painel Financeiro", layout="wide")
-
-# =========================
-# ESTILO VISUAL
-# =========================
-st.title("💼 Painel Financeiro — Ruben & Gabi")
+from datetime import datetime
+import os
 
 # =========================
-# BASE DE DADOS
+# CONFIG
 # =========================
-if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame(columns=[
-        "Pessoa", "Tipo", "Categoria", "Valor"
-    ])
+st.set_page_config(
+    page_title="Gestão Rubi&Gabi PRO",
+    page_icon="💰",
+    layout="wide"
+)
 
 # =========================
-# INPUTS
+# ESTILO
 # =========================
-col1, col2, col3, col4 = st.columns(4)
+st.markdown("""
+<style>
+body {
+    background-color: #2b3441;
+    color: white;
+}
 
-with col1:
-    pessoa = st.selectbox("Pessoa", ["Ruben", "Gabi"])
+.stApp {
+    background-color: #2b3441;
+    color: white;
+}
 
-with col2:
-    tipo = st.selectbox("Tipo", ["Renda", "Despesa"])
+h1, h2, h3 {
+    text-align: center;
+    color: #38bdf8;
+}
 
-with col3:
-    categoria = st.selectbox("Categoria", [
-        "Salário", "Cartão Alimentação", "Casa",
-        "Alimentação", "Lazer", "Transporte", "Outros"
-    ])
+/* cards */
+div[data-testid="metric-container"] {
+    background-color: #3a4656;
+    border-radius: 14px;
+    padding: 14px;
+    transition: 0.3s;
+}
 
-with col4:
-    valor = st.number_input("Valor (€)", min_value=0.0, step=10.0)
+div[data-testid="metric-container"]:hover {
+    transform: scale(1.02);
+    background-color: #44536a;
+}
+</style>
+""", unsafe_allow_html=True)
 
+# =========================
+# FICHEIRO DE DADOS (MEMÓRIA)
+# =========================
+FILE = "dados_financeiros.csv"
+
+def load_data():
+    if os.path.exists(FILE):
+        return pd.read_csv(FILE)
+    else:
+        return pd.DataFrame(columns=[
+            "Pessoa","Tipo","Categoria","Descrição",
+            "Valor","Data","Ano","Mês"
+        ])
+
+def save_data(df):
+    df.to_csv(FILE, index=False)
+
+df = load_data()
+
+# =========================
+# TÍTULO
+# =========================
+st.title("💰 Gestão Rubi&Gabi PRO")
+
+# =========================
+# INPUT
+# =========================
+st.subheader("➕ Novo movimento")
+
+pessoa = st.radio("Pessoa", ["Ruben", "Gabi"], horizontal=True)
+tipo = st.radio("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"], horizontal=True)
+
+categoria = ""
+descricao = ""
+
+if tipo == "Despesa":
+    categoria = st.radio(
+        "Categoria",
+        ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"],
+        horizontal=True
+    )
+
+    if categoria == "Outros":
+        descricao = st.text_input("📝 Descrição")
+
+valor = st.number_input("Valor (€)", min_value=0.0, step=10.0)
+data = st.date_input("Data", datetime.today())
+
+# =========================
+# ADICIONAR
+# =========================
 if st.button("Adicionar"):
-    st.session_state.data = pd.concat([
-        st.session_state.data,
-        pd.DataFrame([[pessoa, tipo, categoria, valor]],
-        columns=["Pessoa", "Tipo", "Categoria", "Valor"])
-    ])
+
+    novo = {
+        "Pessoa": pessoa,
+        "Tipo": tipo,
+        "Categoria": categoria,
+        "Descrição": descricao,
+        "Valor": valor,
+        "Data": data,
+        "Ano": data.year,
+        "Mês": data.month
+    }
+
+    df = pd.concat([df, pd.DataFrame([novo])], ignore_index=True)
+    save_data(df)
+
+    st.success("Guardado com sucesso 👍")
 
 # =========================
-# DADOS
+# FILTRO PESSOA
 # =========================
-df = st.session_state.data
+if not df.empty:
+    pessoa_sel = st.selectbox("Ver dados de:", ["Todos", "Ruben", "Gabi"])
+    if pessoa_sel != "Todos":
+        df = df[df["Pessoa"] == pessoa_sel]
 
 # =========================
-# MÉTRICAS
+# RESUMO
 # =========================
-rendas = df[df["Tipo"] == "Renda"]["Valor"].sum()
-despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
-saldo = rendas - despesas
-
-c1, c2, c3 = st.columns(3)
-
-c1.metric("💰 Rendas", f"€ {rendas:,.2f}")
-c2.metric("💸 Despesas", f"€ {despesas:,.2f}")
-c3.metric("⚖️ Saldo", f"€ {saldo:,.2f}")
-
-# =========================
-# GRÁFICO
-# =========================
-st.subheader("📊 Distribuição Financeira")
+st.subheader("📊 Resumo Financeiro")
 
 if not df.empty:
-    fig = px.pie(df, values="Valor", names="Categoria", hole=0.4)
+
+    rend = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]["Valor"].sum()
+    desp = df[df["Tipo"] == "Despesa"]["Valor"].sum()
+    saldo = rend - desp
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("💵 Rendimentos", f"€ {rend:.2f}")
+    col2.metric("🧾 Despesas", f"€ {desp:.2f}")
+    col3.metric("📈 Saldo", f"€ {saldo:.2f}")
+
+# =========================
+# GRÁFICO MENSAL (ORDENADO)
+# =========================
+if not df.empty:
+
+    st.subheader("📊 Evolução Mensal")
+
+    mensal = df.groupby("Mês")["Valor"].sum().reset_index()
+
+    fig = px.bar(
+        mensal,
+        x="Mês",
+        y="Valor",
+        text="Valor"
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 # =========================
-# TABELA
+# DESPESAS
 # =========================
-st.subheader("📋 Movimentos")
+if not df.empty:
 
-st.dataframe(df, use_container_width=True)
+    st.subheader("📊 Despesas por Categoria")
+
+    despesas = df[df["Tipo"] == "Despesa"]
+
+    fig2 = px.pie(
+        despesas,
+        values="Valor",
+        names="Categoria"
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
 
 # =========================
-# FILTRO POR PESSOA
+# HISTÓRICO
 # =========================
-st.subheader("👨‍👩‍👧‍👦 Análise por Pessoa")
+st.subheader("📅 Histórico Completo")
 
-pessoa_sel = st.selectbox("Selecionar", ["Ruben", "Gabi"])
-
-df_pessoa = df[df["Pessoa"] == pessoa_sel]
-
-st.write("💰 Total:", df_pessoa[df_pessoa["Tipo"]=="Renda"]["Valor"].sum())
-st.write("💸 Despesas:", df_pessoa[df_pessoa["Tipo"]=="Despesa"]["Valor"].sum())
+if not df.empty:
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("Sem dados ainda.")
