@@ -55,7 +55,7 @@ def guardar(d):
     ])
 
 # =========================
-# HEADER
+# INPUT
 # =========================
 st.subheader("➕ Novo registo")
 
@@ -107,31 +107,47 @@ if st.button("Adicionar"):
 df = load_data()
 
 # =========================
-# REMOVER MOVIMENTO (CORRIGIDO)
+# REMOVER (CORRIGIDO 100%)
 # =========================
 st.subheader("🗑️ Remover movimento")
 
 if not df.empty:
 
-    # cria cópia com linha real da sheet
-    df["Linha"] = range(2, len(df) + 2)
+    raw = sheet.get_all_values()
+    headers = raw[0]
+    rows = raw[1:]
+
+    data = []
+    for i, r in enumerate(rows, start=2):  # linha real no Google Sheets
+        if len(r) >= 5:
+            data.append({
+                "Linha": i,
+                "Pessoa": r[0],
+                "Tipo": r[1],
+                "Categoria": r[2],
+                "Descricao": r[3],
+                "Valor": r[4],
+                "Data": r[5] if len(r) > 5 else ""
+            })
+
+    df_delete = pd.DataFrame(data)
 
     escolha = st.selectbox(
         "Seleciona o movimento",
-        df.index,
+        df_delete.index,
         format_func=lambda i:
-            f"{df.loc[i, 'Pessoa']} | {df.loc[i, 'Tipo']} | €{df.loc[i, 'Valor']}"
+            f"{df_delete.loc[i, 'Pessoa']} | {df_delete.loc[i, 'Tipo']} | €{df_delete.loc[i, 'Valor']}"
     )
 
-    linha_real = int(df.loc[escolha, "Linha"])
+    linha_real = int(df_delete.loc[escolha, "Linha"])
 
-    st.dataframe(df.drop(columns=["Linha"]), use_container_width=True)
+    st.dataframe(df_delete.drop(columns=["Linha"]), use_container_width=True)
 
     if st.button("🗑️ Apagar movimento"):
 
         sheet.delete_rows(linha_real)
 
-        st.success("Movimento removido 🗑️")
+        st.success("Movimento apagado 🗑️")
         st.rerun()
 
 else:
@@ -151,7 +167,6 @@ if not df.empty:
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("📅 Evolução Mensal")
-
     mensal = df.groupby("Mês")["Valor"].sum().reset_index()
 
     fig2 = px.line(mensal, x="Mês", y="Valor", markers=True)
