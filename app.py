@@ -8,7 +8,7 @@ from datetime import datetime
 # =========================
 st.set_page_config(
     page_title="Rubi&Gabi",
-    page_icon="💰",
+    page_icon="",
     layout="wide"
 )
 
@@ -48,14 +48,13 @@ if "data" not in st.session_state:
     st.session_state.data = []
 
 # =========================
-# TÍTULO (ALTERADO)
+# TÍTULO
 # =========================
 st.title("💰 Rubi&Gabi")
 
 # =========================
-# INPUT (SEM TÍTULO EXTRA)
+# INPUT
 # =========================
-
 colA, colB = st.columns(2)
 
 with colA:
@@ -80,7 +79,7 @@ valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 # =========================
-# ADICIONAR (SEM TEXTO VISUAL)
+# ADICIONAR
 # =========================
 if st.button("Adicionar"):
     st.session_state.data.append({
@@ -136,16 +135,30 @@ if not df.empty:
         df = df[df["Pessoa"] == pessoa_sel]
 
 # =========================
-# GRÁFICO
+# GRÁFICO MENSAL (FIX 1–12)
 # =========================
 if not df.empty:
 
     st.subheader("📊 Evolução Mensal")
 
+    # garantir inteiro
+    df["Mês"] = df["Mês"].astype(int)
+
     mensal = df.groupby("Mês")["Valor"].sum().reset_index()
     mensal = mensal.sort_values("Mês")
 
-    fig = px.bar(mensal, x="Mês", y="Valor", text="Valor")
+    fig = px.bar(
+        mensal,
+        x="Mês",
+        y="Valor",
+        text="Valor"
+    )
+
+    fig.update_xaxes(
+        tickmode="linear",
+        dtick=1
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 # =========================
