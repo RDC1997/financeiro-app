@@ -51,7 +51,43 @@ def load_categories():
         return []
     return [row[0] for row in data[1:] if row[0].strip()]
 
+def add_category(cat):
+    cat_sheet.append_row([cat])
+
+def delete_category(cat):
+    data = cat_sheet.get_all_values()
+    for i, row in enumerate(data):
+        if i == 0:
+            continue
+        if row[0] == cat:
+            cat_sheet.delete_rows(i + 1)
+            break
+
 categories = load_categories()
+
+# =========================
+# SIDEBAR CATEGORIAS
+# =========================
+st.sidebar.markdown("## ⚙️ Categorias")
+
+with st.sidebar.expander("➕ Adicionar categoria"):
+    new_cat = st.text_input("Nova categoria")
+    if st.button("Adicionar categoria"):
+        if new_cat.strip():
+            add_category(new_cat.strip())
+            st.cache_data.clear()
+            st.rerun()
+
+with st.sidebar.expander("❌ Remover categoria"):
+    if categories:
+        cat_del = st.selectbox("Escolhe categoria", categories)
+        if st.button("Remover categoria"):
+            delete_category(cat_del)
+            st.cache_data.clear()
+            st.rerun()
+
+with st.sidebar.expander("📋 Ver categorias"):
+    st.write(categories)
 
 # =========================
 # DATA
@@ -85,6 +121,15 @@ def load_data():
 df = load_data()
 
 # =========================
+# METAS
+# =========================
+def load_goals():
+    data = goal_sheet.get_all_records()
+    return pd.DataFrame(data)
+
+goals = load_goals()
+
+# =========================
 # DELETE SAFE
 # =========================
 def delete_row_safe(row):
@@ -100,69 +145,109 @@ def delete_row_safe(row):
 # =========================
 modo = st.sidebar.selectbox("Modo", ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"])
 
-avatars = {
-    "Ruben 🤴": "🤴",
-    "Gabi 👸": "👸",
-    "Casal 👨‍❤️‍👩": "👨‍❤️‍👩"
-}
-
 # =========================
-# 🟢 CASAL (VERSÃO RESTAURADA CORRIGIDA)
+# METAS
 # =========================
-if modo == "Casal 👨‍❤️‍👩":
+if modo == "Metas 🎯":
 
-    st.subheader("📊 Visão Geral (Casal)")
+    st.subheader("🎯 Metas Financeiras")
 
-    def get_last_salary(df, pessoa):
-        df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
-        if df_p.empty:
-            return None
-        return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
+    with st.expander("➕ Criar meta"):
+        nome = st.text_input("Nome da meta")
+        objetivo = st.number_input("Objetivo (€)", min_value=0.0)
 
-    def filtrar_ciclo(df, pessoa):
-        last_salary = get_last_salary(df, pessoa)
-        if not last_salary:
-            return df[df["Pessoa"] == pessoa]
-        return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
+        if st.button("Criar meta"):
+            goal_sheet.append_row([nome, objetivo, 0])
+            st.rerun()
 
-    for pessoa in ["Ruben", "Gabi"]:
+    for i, row in goals.iterrows():
 
-        st.markdown(f"## {avatars[pessoa]} {pessoa}")
+        if "Meta" not in row:
+            continue
 
-        df_p = filtrar_ciclo(df, pessoa)
+        meta = row["Meta"]
+        obj = float(row["Objetivo"])
+        atual = float(row["Atual"])
 
-        with st.expander(f"🔍 Debug do ciclo - {pessoa}"):
-            st.write("Último salário:", get_last_salary(df, pessoa))
-            st.write("Registos no ciclo:", len(df_p))
-            st.dataframe(df_p[["Tipo","Categoria","Valor","Data"]])
+        percent = (atual / obj * 100) if obj > 0 else 0
 
-        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
-        despesas = df_p[df_p["Tipo"] == "Despesa"]
-
-        st.markdown("### 💰 Receitas")
-        if not receitas.empty:
-            st.dataframe(receitas[["Tipo","Valor","Data"]], use_container_width=True)
+        if percent < 25:
+            emoji = "🔴"
+        elif percent < 50:
+            emoji = "🟠"
+        elif percent < 75:
+            emoji = "🟡"
         else:
-            st.info("Sem receitas neste ciclo")
+            emoji = "🟢"
 
-        st.markdown("### 💸 Despesas")
-        if not despesas.empty:
-            st.dataframe(despesas[["Categoria","Valor","Data"]], use_container_width=True)
+        st.write(f"## 🎯 {meta}")
+        st.progress(min(percent / 100, 1))
+        st.write(f"{emoji} {percent:.1f}% — € {atual:.2f} / € {obj:.2f}")
 
-            total = despesas["Valor"].sum()
-            st.markdown(f"### 💰 Total de Despesas: € {total:.2f}")
-        else:
-            st.info("Sem despesas neste ciclo")
+        c1, c2 = st.columns(2)
+
+        add = c1.number_input("Adicionar", min_value=0.0, key=f"add_{i}")
+
+        if c1.button("Adicionar", key=f"btn_{i}"):
+            goal_sheet.update_cell(i + 2, 3, atual + add)
+            st.rerun()
+
+        if c2.button("Eliminar", key=f"del_{i}"):
+            goal_sheet.delete_rows(i + 2)
+            st.rerun()
 
     st.stop()
 
 # =========================
-# 🔵 INDIVIDUAL
+# AVATARS CORRIGIDO
 # =========================
-st.subheader(f"{avatars[modo]} {modo}")
+avatars = {
+    "Ruben": "🤴",
+    "Gabi": "👸",
+    "Casal": "👨‍❤️‍👩"
+}
 
-pessoa = modo.split()[0]
+# =========================
+# CASAL / RUBEN / GABI
+# =========================
+st.subheader(f"{avatars.get(modo.split()[0], '👤')} {modo}")
 
+pessoa = None if "Casal" in modo else modo.split()[0]
+
+def filtrar(df, pessoa):
+    return df if pessoa is None else df[df["Pessoa"] == pessoa]
+
+df_user = filtrar(df, pessoa)
+
+# =========================
+# 🔥 CASAL COM TABELA COMPLETA RESTAURADA
+# =========================
+if "Casal" in modo:
+
+    st.markdown("## 📊 CASAL - VISÃO COMPLETA")
+
+    for p in ["Ruben", "Gabi"]:
+
+        st.markdown(f"### {avatars[p]} {p}")
+
+        df_p = df[df["Pessoa"] == p]
+
+        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+        despesas = df_p[df_p["Tipo"] == "Despesa"]
+
+        st.markdown("#### 💰 Receitas")
+        st.dataframe(receitas, use_container_width=True)
+
+        st.markdown("#### 💸 Despesas")
+        st.dataframe(despesas, use_container_width=True)
+
+        st.markdown(f"**Total despesas: € {despesas['Valor'].sum():.2f}**")
+
+    st.stop()
+
+# =========================
+# INDIVIDUAL
+# =========================
 tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
 
 categoria = ""
@@ -176,20 +261,25 @@ valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 if st.button("Adicionar"):
-    sheet.append_row([pessoa,tipo,categoria,descricao,float(valor),str(data)])
+    sheet.append_row([
+        pessoa if pessoa else "Casal",
+        tipo,
+        categoria,
+        descricao,
+        float(valor),
+        str(data)
+    ])
     st.rerun()
 
 # =========================
-# 🗑 ELIMINAR
+# ELIMINAR
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
 
-df_user = df[df["Pessoa"] == pessoa].sort_values("Data", ascending=False)
+for _, row in df_user.sort_values("Data", ascending=False).iterrows():
 
-for _, row in df_user.iterrows():
-
-    c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
+    c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
     c1.write(row["Pessoa"])
     c2.write(row["Tipo"])
