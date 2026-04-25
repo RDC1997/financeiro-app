@@ -12,54 +12,6 @@ st.set_page_config(page_title="Rubi&Gabi Finance", layout="wide")
 st.title("💰 Controlo Financeiro")
 
 # =========================
-# 🎨 CSS CUSTOM
-# =========================
-st.markdown("""
-<style>
-
-/* layout geral */
-.block-container {
-    padding-top: 2rem;
-    padding-left: 2rem;
-    padding-right: 2rem;
-}
-
-/* títulos */
-h1, h2, h3 {
-    font-family: Arial;
-    font-weight: 600;
-}
-
-/* tabelas */
-table {
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-/* header tabela */
-th {
-    text-align: left !important;
-    background-color: #f5f5f5;
-    font-weight: 600;
-}
-
-/* alinhamento colunas */
-td:nth-child(1) {
-    text-align: left;
-}
-
-td:nth-child(2) {
-    text-align: center;
-}
-
-td:nth-child(3) {
-    text-align: right;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-# =========================
 # GOOGLE SHEETS
 # =========================
 scope = [
@@ -82,7 +34,7 @@ except Exception:
     st.stop()
 
 # =========================
-# DATA (ROBUSTO)
+# DATA
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -152,7 +104,6 @@ if modo == "Casal":
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-        # 💰 RECEITAS
         st.markdown("### 💰 Receitas")
 
         if not receitas.empty:
@@ -160,27 +111,13 @@ if modo == "Casal":
         else:
             st.info("Sem receitas")
 
-        # 💸 DESPESAS
         st.markdown("### 💸 Despesas")
 
         if not despesas.empty:
-
-            despesas = despesas.copy()
-
-            despesas["Categoria"] = despesas.apply(
-                lambda r: (
-                    f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
-                    if r["Categoria"] == "Outros" and str(r["Descrição"]).strip() != ""
-                    else f"{icons.get(r['Categoria'],'')} {r['Categoria']}"
-                ),
-                axis=1
-            )
-
             st.dataframe(despesas[["Categoria","Valor","Data"]], use_container_width=True)
 
             total = despesas["Valor"].sum()
             st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
-
         else:
             st.info("Sem despesas")
 
@@ -201,17 +138,25 @@ descricao = ""
 if tipo == "Despesa":
     categoria = st.selectbox("Categoria", ["Renda","Vodafone","Gasolina","Alimentação","Luz","Água","Outros"])
 
+    # 🔥 NOVA REGRA: OUTROS OBRIGA DESCRIÇÃO
     if categoria == "Outros":
-        descricao = st.text_input("Descrição")
+        descricao = st.text_input("Descrição obrigatória")
 
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
+# ❌ bloquear datas futuras
 if data > datetime.today().date():
     st.error("Não podes escolher data futura")
     st.stop()
 
 if st.button("Adicionar"):
+
+    # 🔥 VALIDAÇÃO FORTE
+    if tipo == "Despesa" and categoria == "Outros" and descricao.strip() == "":
+        st.error("❌ Tens de preencher a descrição quando escolheste 'Outros'")
+        st.stop()
+
     sheet.append_row([
         pessoa,
         tipo,
