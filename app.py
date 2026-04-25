@@ -49,7 +49,6 @@ def load_data():
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
     return df
@@ -63,6 +62,9 @@ def guardar(d):
         float(d["Valor"]),
         str(d["Data"])
     ])
+
+def apagar_linha(index):
+    sheet.delete_rows(index + 2)  # +2 por causa do header + index 0
 
 df = load_data()
 
@@ -90,7 +92,7 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 📅 FILTRO MÊS (FIXED)
+# FILTRO MÊS
 # =========================
 if not df.empty:
     df["Mes"] = df["Data"].dt.to_period("M").astype(str)
@@ -105,7 +107,7 @@ if not df.empty:
         df = df[df["Mes"] == mes]
 
 # =========================
-# 🟢 CASAL (DASHBOARD)
+# 🟢 CASAL (SÓ VISUALIZAÇÃO)
 # =========================
 if modo == "Casal":
 
@@ -117,43 +119,27 @@ if modo == "Casal":
     col1, col2, col3 = st.columns(3)
     col1.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
     col2.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
-    col3.metric("⚖️ Saldo", f"€ {(receitas['Valor'].sum() - despesas['Valor'].sum()):.2f}")
+    col3.metric("⚖️ Saldo", f"€ {(receitas['Valor'].sum()-despesas['Valor'].sum()):.2f}")
 
     st.markdown("---")
 
-    # =========================
-    # DETALHE RECEITAS
-    # =========================
-    st.markdown("## 💰 Receitas (detalhe)")
-    if not receitas.empty:
-        st.table(receitas[["Pessoa","Tipo","Valor","Data"]])
-    else:
-        st.info("Sem receitas")
-
-    # =========================
-    # DETALHE DESPESAS
-    # =========================
     st.markdown("## 💸 Despesas (detalhe)")
-    if not despesas.empty:
 
-        despesas = despesas.copy()
+    despesas = despesas.copy()
 
-        despesas["Categoria"] = despesas.apply(
-            lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
-            if r["Categoria"] == "Outros"
-            else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
-            axis=1
-        )
+    despesas["Categoria"] = despesas.apply(
+        lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
+        if r["Categoria"] == "Outros"
+        else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
+        axis=1
+    )
 
-        st.table(despesas[["Pessoa","Categoria","Valor","Data"]])
-
-    else:
-        st.info("Sem despesas")
+    st.table(despesas[["Pessoa","Categoria","Valor","Data"]])
 
     st.stop()
 
 # =========================
-# 🔵 GESTÃO
+# 🔵 GESTÃO (R / G)
 # =========================
 st.subheader("➕ Novo registo")
 
@@ -186,3 +172,28 @@ if st.button("Adicionar"):
     st.cache_data.clear()
     st.success("Adicionado com sucesso")
     st.rerun()
+
+# =========================
+# 🗑 ELIMINAR REGISTOS
+# =========================
+st.markdown("---")
+st.subheader("🗑 Eliminar registos")
+
+if not df.empty:
+    for i, row in df.iterrows():
+
+        col1, col2, col3, col4, col5 = st.columns([2,3,2,2,1])
+
+        col1.write(row["Pessoa"])
+        col2.write(row["Tipo"])
+        col3.write(row["Categoria"])
+        col4.write(row["Valor"])
+
+        if col5.button("❌", key=f"del_{i}"):
+
+            st.warning("Tens a certeza?")
+            if st.button("Sim, eliminar", key=f"confirm_{i}"):
+                apagar_linha(i)
+                st.cache_data.clear()
+                st.success("Eliminado")
+                st.rerun()
