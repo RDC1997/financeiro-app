@@ -3,16 +3,15 @@ import pandas as pd
 from datetime import datetime
 import time
 import uuid
-import plotly.express as px
 
 import gspread
 from google.oauth2.service_account import Credentials
 
 # =========================
-# APP CONFIG
+# APP
 # =========================
-st.set_page_config(page_title="Rubi&Gabi Finance 2.0", layout="wide")
-st.title("💰 Controlo Financeiro 2.0")
+st.set_page_config(page_title="Rubi&Gabi Finance", layout="wide")
+st.title("💰 Controlo Financeiro")
 
 # =========================
 # HELPERS
@@ -53,49 +52,19 @@ try:
         goal_sheet = client.open_by_key(SHEET_ID).worksheet("Metas")
     except:
         goal_sheet = client.open_by_key(SHEET_ID).add_worksheet("Metas", 100, 3)
-        goal_sheet.append_row(["Meta", "Objetivo", "Atual"])
+        goal_sheet.append_row(["Meta","Objetivo","Atual"])
 
 except Exception as e:
     st.error(f"Erro Google Sheets: {e}")
     st.stop()
 
 # =========================
-# MIGRAÇÃO (VERSÃO 2 - ID SYSTEM)
-# =========================
-def migrate_if_needed():
-    data = sheet.get_all_values()
-
-    if not data:
-        sheet.append_row(["ID","Pessoa","Tipo","Categoria","Descrição","Valor","Data"])
-        return
-
-    headers = data[0]
-
-    if "ID" not in headers:
-        st.warning("🔄 A migrar base de dados para versão 2.0...")
-
-        new_data = [["ID","Pessoa","Tipo","Categoria","Descrição","Valor","Data"]]
-
-        for row in data[1:]:
-            new_data.append([
-                generate_id(),
-                *row
-            ])
-
-        sheet.clear()
-        sheet.update(new_data)
-
-        st.success("Migração concluída!")
-
-migrate_if_needed()
-
-# =========================
-# CATEGORIAS
+# CATEGORIAS (RESTAURADO COMPLETO)
 # =========================
 @st.cache_data(ttl=30)
 def load_categories():
     data = cat_sheet.get_all_values()
-    return [r[0] for r in data[1:] if len(r) > 0]
+    return [row[0] for row in data[1:] if row[0].strip() != ""]
 
 def add_category(cat):
     safe_sleep()
@@ -114,11 +83,12 @@ def delete_category(cat):
 categories = load_categories()
 
 # =========================
-# DATA LOAD
+# DATA
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
     raw = sheet.get_all_values()
+
     cols = ["ID","Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
 
     if len(raw) < 2:
@@ -131,72 +101,72 @@ def load_data():
 
     return df
 
-# =========================
-# METAS
-# =========================
-@st.cache_data(ttl=30)
-def load_goals():
-    raw = goal_sheet.get_all_values()
-
-    if len(raw) < 2:
-        return pd.DataFrame(columns=["Meta","Objetivo","Atual"])
-
-    df = pd.DataFrame(raw[1:], columns=raw[0])
-    df["Objetivo"] = pd.to_numeric(df["Objetivo"], errors="coerce").fillna(0)
-    df["Atual"] = pd.to_numeric(df["Atual"], errors="coerce").fillna(0)
-
-    df["row"] = df.index + 2
-    return df
-
-# =========================
-# DELETE SAFE (BY ID)
-# =========================
-def delete_by_id(record_id):
-    data = sheet.get_all_values()
-
-    headers = data[0]
-    id_index = headers.index("ID")
-
-    for i, row in enumerate(data[1:], start=2):
-        if row[id_index] == record_id:
-            sheet.delete_rows(i)
-            return True
-
-    return False
+df = load_data()
 
 # =========================
 # MENU
 # =========================
 modo = st.sidebar.selectbox(
     "Modo",
-    ["Dashboard 📊","Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯"]
+    ["Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯"]
 )
 
 avatars = {"Ruben":"🤴","Gabi":"👸"}
 
-df = load_data()
+# =========================
+# CATEGORIAS UI (RESTAURADO)
+# =========================
+st.sidebar.markdown("## ⚙️ Categorias")
+
+with st.sidebar.expander("➕ Adicionar categoria"):
+    new_cat = st.text_input("Nova categoria")
+
+    if st.button("Adicionar"):
+        if new_cat.strip():
+            add_category(new_cat.strip())
+            refresh()
+
+with st.sidebar.expander("❌ Remover categoria"):
+    if categories:
+        cat_del = st.selectbox("Escolher", categories)
+
+        if st.button("Remover"):
+            delete_category(cat_del)
+            refresh()
+
+with st.sidebar.expander("📋 Ver categorias"):
+    st.write(categories)
 
 # =========================
-# DASHBOARD
+# CASAL (CORRIGIDO - LÓGICA MENSAL)
 # =========================
-if modo == "Dashboard 📊":
+if modo == "Casal 👨‍❤️‍👩":
 
-    st.subheader("📊 Visão Geral")
+    st.subheader("👨‍❤️‍👩 Casal - Visão Mensal")
 
-    total_receitas = df[df["Tipo"] != "Despesa"]["Valor"].sum()
-    total_despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
-    saldo = total_receitas - total_despesas
+    mes_atual = datetime.today().month
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("💰 Receitas", f"{total_receitas:.2f} €")
-    c2.metric("💸 Despesas", f"{total_despesas:.2f} €")
-    c3.metric("📊 Saldo", f"{saldo:.2f} €")
+    for p in ["Ruben","Gabi"]:
 
-    st.markdown("---")
+        st.markdown(f"## {avatars[p]} {p}")
 
-    chart = df[df["Tipo"] == "Despesa"]
-    fig = px.bar(chart, x="Categoria", y="Valor", color="Pessoa", title="Despesas por Categoria")
-    st.plotly_chart(fig, use_container_width=True)
+        df_p = df[df["Pessoa"] == p]
+        df_mes = df_p[pd.to_datetime(df_p["Data"]).dt.month == mes_atual]
+
+        receitas = df_mes[df_mes["Tipo"] != "Despesa"]
+        despesas = df_mes[df_mes["Tipo"] == "Despesa"]
+
+        st.markdown("### 📅 Mês atual")
+
+        st.write("#### 💰 Receitas")
+        st.dataframe(receitas, use_container_width=True)
+
+        st.write("#### 💸 Despesas")
+        st.dataframe(despesas, use_container_width=True)
+
+        st.write(f"**Total despesas: € {despesas['Valor'].sum():.2f}**")
+
+        st.markdown("---")
 
     st.stop()
 
@@ -207,60 +177,21 @@ if modo == "Metas 🎯":
 
     st.subheader("🎯 Metas")
 
+    def load_goals():
+        raw = goal_sheet.get_all_values()
+        return pd.DataFrame(raw[1:], columns=raw[0]) if len(raw) > 1 else pd.DataFrame()
+
     goals = load_goals()
 
-    with st.expander("➕ Nova meta"):
-        nome = st.text_input("Meta")
+    with st.expander("➕ Criar meta"):
+        nome = st.text_input("Nome")
         obj = st.number_input("Objetivo (€)", min_value=0.0)
 
         if st.button("Criar"):
             goal_sheet.append_row([nome,obj,0])
             refresh()
 
-    for _, row in goals.iterrows():
-
-        meta = row["Meta"]
-        obj = float(row["Objetivo"])
-        atual = float(row["Atual"])
-        r = int(row["row"])
-
-        percent = (atual/obj*100) if obj else 0
-
-        st.write(f"### 🎯 {meta}")
-        st.progress(min(percent/100,1))
-        st.write(f"{percent:.1f}% — {atual:.2f}/{obj:.2f}")
-
-        c1, c2 = st.columns(2)
-
-        add = c1.number_input("Adicionar", min_value=0.0, key=f"a{r}")
-
-        if c1.button("OK", key=f"b{r}"):
-            goal_sheet.update_cell(r,3,atual+add)
-            refresh()
-
-        if c2.button("🗑", key=f"d{r}"):
-            goal_sheet.delete_rows(r)
-            refresh()
-
-    st.stop()
-
-# =========================
-# CASAL
-# =========================
-if modo == "Casal 👨‍❤️‍👩":
-
-    st.subheader("👨‍❤️‍👩 Casal")
-
-    for p in ["Ruben","Gabi"]:
-
-        st.markdown(f"## {avatars[p]} {p}")
-
-        df_p = df[df["Pessoa"] == p]
-
-        st.write("### Despesas")
-        st.dataframe(df_p[df_p["Tipo"]=="Despesa"])
-
-        st.write(f"Total: {df_p[df_p['Tipo']=='Despesa']['Valor'].sum():.2f} €")
+    st.dataframe(goals)
 
     st.stop()
 
@@ -313,5 +244,13 @@ for _, row in df_user.sort_values("Data", ascending=False).iterrows():
     c4.write(f"{row['Valor']:.2f} €")
 
     if c5.button("❌", key=row["ID"]):
-        delete_by_id(row["ID"])
+        data = sheet.get_all_values()
+        headers = data[0]
+        id_index = headers.index("ID")
+
+        for i, r in enumerate(data[1:], start=2):
+            if r[id_index] == row["ID"]:
+                sheet.delete_rows(i)
+                break
+
         refresh()
