@@ -56,19 +56,6 @@ def load_data():
 
     return df
 
-def guardar(d):
-    sheet.append_row([
-        d["Pessoa"],
-        d["Tipo"],
-        d["Categoria"],
-        d["Descrição"],
-        float(d["Valor"]),
-        str(d["Data"])
-    ])
-
-def eliminar(row):
-    sheet.delete_rows(row)
-
 df = load_data()
 
 # =========================
@@ -95,7 +82,7 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 🟢 CASAL (VISUALIZAÇÃO)
+# CASAL
 # =========================
 if modo == "Casal":
 
@@ -110,12 +97,23 @@ if modo == "Casal":
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
+        # =========================
+        # 💰 RECEITAS (CORRIGIDO)
+        # =========================
         st.markdown("### 💰 Receitas")
-        st.table(receitas[["Tipo","Valor","Data"]]) if not receitas.empty else st.info("Sem receitas")
 
+        if not receitas.empty:
+            st.table(receitas[["Tipo","Valor","Data"]])
+        else:
+            st.info("Sem receitas")
+
+        # =========================
+        # 💸 DESPESAS (CORRIGIDO)
+        # =========================
         st.markdown("### 💸 Despesas")
 
         if not despesas.empty:
+
             despesas = despesas.copy()
 
             despesas["Categoria"] = despesas.apply(
@@ -126,15 +124,14 @@ if modo == "Casal":
             )
 
             st.table(despesas[["Categoria","Valor","Data"]])
+
         else:
             st.info("Sem despesas")
-
-        st.markdown("---")
 
     st.stop()
 
 # =========================
-# 🔵 GESTÃO (RUBEN / GABI)
+# GESTÃO
 # =========================
 st.subheader(f"➕ Novo registo ({modo})")
 
@@ -160,14 +157,14 @@ if data > datetime.today().date():
     st.stop()
 
 if st.button("Adicionar"):
-    guardar({
-        "Pessoa": pessoa,
-        "Tipo": tipo,
-        "Categoria": categoria,
-        "Descrição": descricao,
-        "Valor": valor,
-        "Data": data
-    })
+    sheet.append_row([
+        pessoa,
+        tipo,
+        categoria,
+        descricao,
+        float(valor),
+        str(data)
+    ])
 
     st.cache_data.clear()
     st.success("Adicionado com sucesso")
@@ -179,9 +176,7 @@ if st.button("Adicionar"):
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
 
-df_user = df[df["Pessoa"] == modo]
-
-for _, row in df_user.iterrows():
+for _, row in df[df["Pessoa"] == modo].iterrows():
 
     c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
@@ -191,7 +186,7 @@ for _, row in df_user.iterrows():
     c4.write(row["Valor"])
 
     if c5.button("❌", key=f"del_{row['sheet_row']}"):
-        eliminar(row["sheet_row"])
+        sheet.delete_rows(row["sheet_row"])
         st.cache_data.clear()
         st.success("Eliminado")
         st.rerun()
