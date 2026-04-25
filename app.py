@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import io
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -28,13 +27,45 @@ try:
     )
 
     client = gspread.authorize(creds)
-    sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
 
-    cat_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Categorias")
+    sheet = client.open_by_key(
+        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+    ).sheet1
 
-except Exception:
-    st.error("❌ Erro ao ligar ao Google Sheets")
+    cat_sheet = client.open_by_key(
+        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+    ).worksheet("Categorias")
+
+except Exception as e:
+    st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
     st.stop()
+
+# =========================
+# CATEGORIAS
+# =========================
+@st.cache_data(ttl=10)
+def load_categories():
+    data = cat_sheet.get_all_values()
+
+    if len(data) < 2:
+        return []
+
+    return [row[0] for row in data[1:] if row[0].strip() != ""]
+
+def add_category(cat):
+    cat_sheet.append_row([cat])
+
+def delete_category(cat):
+    data = cat_sheet.get_all_values()
+
+    for i, row in enumerate(data):
+        if i == 0:
+            continue
+        if row[0] == cat:
+            cat_sheet.delete_rows(i + 1)
+            break
+
+categories = load_categories()
 
 # =========================
 # DATA
@@ -43,7 +74,14 @@ except Exception:
 def load_data():
     raw = sheet.get_all_values()
 
-    expected_cols = ["Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
+    expected_cols = [
+        "Pessoa",
+        "Tipo",
+        "Categoria",
+        "Descrição",
+        "Valor",
+        "Data"
+    ]
 
     if not raw or len(raw) < 2:
         return pd.DataFrame(columns=expected_cols)
@@ -61,76 +99,87 @@ def load_data():
     df["Descrição"] = df["Descrição"].astype(str).fillna("")
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
+
     df["sheet_row"] = df.index + 2
 
     return df
 
+
 df = load_data()
 
 # =========================
-# CATEGORIAS (NOVO - SEM REMOVER FIXAS)
+# DELETE
 # =========================
-@st.cache_data(ttl=30)
-def load_categories():
-    fixed = ["Renda","Vodafone","Gasolina","Alimentação","Luz","Água","Outros"]
-
+def delete_row_safe(row):
     try:
-        data = cat_sheet.get_all_values()
-        sheet_cats = [r[0] for r in data[1:] if r and r[0].strip()]
-    except:
-        sheet_cats = []
-
-    return list(dict.fromkeys(fixed + sheet_cats))
-
-categories = load_categories()
+        sheet.delete_rows(int(row))
+        return True
+    except Exception as e:
+        st.error(f"Erro ao eliminar: {e}")
+        return False
 
 # =========================
-# OBJETIVOS FINANCEIROS (NOVO)
+# SIDEBAR - GESTÃO DE CATEGORIAS
 # =========================
-st.sidebar.markdown("## 🎯 Objetivos")
+st.sidebar.markdown("## ⚙️ Categorias")
 
-goal = st.sidebar.number_input("Objetivo mensal (€)", min_value=0.0)
+with st.sidebar.expander("➕ Adicionar categoria"):
 
-# =========================
-# CICLO
-# =========================
-def get_last_salary(df, pessoa):
-    df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
-    if df_p.empty:
-        return None
-    return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
+    nova_cat = st.text_input("Nova categoria")
 
-def filtrar_ciclo(df, pessoa):
-    last_salary = get_last_salary(df, pessoa)
+    if st.button("Adicionar"):
+        if nova_cat.strip() != "":
+            add_category(nova_cat.strip())
+            st.cache_data.clear()
+            st.success("Categoria adicionada")
+            st.rerun()
 
-    if not last_salary:
-        return df[df["Pessoa"] == pessoa]
+with st.sidebar.expander("❌ Remover categoria"):
 
-    return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
+    if categories:
+        cat_del = st.selectbox("Escolhe categoria", categories)
+
+        if st.button("Remover"):
+            delete_category(cat_del)
+            st.cache_data.clear()
+            st.success("Categoria removida")
+            st.rerun()
+    else:
+        st.info("Sem categorias disponíveis")
+
+with st.sidebar.expander("📋 Categorias atuais"):
+    st.write(categories)
 
 # =========================
 # MODO
 # =========================
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
-avatars = {"Ruben":"🤴","Gabi":"👸"}
+avatars = {
+    "Ruben": "🤴",
+    "Gabi": "👸"
+}
 
 # =========================
 # CASAL
 # =========================
 if modo == "Casal":
 
-    st.subheader("📊 Dashboard Casal")
+    st.subheader("📊 Visão Geral")
 
-    total_r = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
-    total_d = df[df["Tipo"]=="Despesa"]["Valor"].sum()
+    for pessoa in ["Ruben", "Gabi"]:
 
-    st.metric("Receitas", f"€ {total_r:.2f}")
-    st.metric("Despesas", f"€ {total_d:.2f}")
+        st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-    if goal > 0:
-        st.progress(min(total_d / goal, 1.0))
-        st.write(f"Objetivo: € {goal}")
+        df_p = df[df["Pessoa"] == pessoa]
+
+        receitas = df_p[df_p["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
+        despesas = df_p[df_p["Tipo"] == "Despesa"]
+
+        c1, c2 = st.columns(2)
+
+        c1.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
+        c2.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
 
     st.stop()
 
@@ -141,21 +190,28 @@ st.subheader(f"{avatars[modo]} {modo}")
 
 pessoa = modo
 
-tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
+tipo = st.selectbox(
+    "Tipo",
+    ["Salário", "Subsídio Alimentação", "Despesa"]
+)
 
 categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
-    categoria = st.selectbox("Categoria", categories)
 
-    if categoria == "Outros":
-        descricao = st.text_input("Descrição")
+    if categories:
+        categoria = st.selectbox("Categoria", categories)
+    else:
+        categoria = st.text_input("Categoria")
+
+    descricao = st.text_input("Descrição")
 
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 if st.button("Adicionar"):
+
     sheet.append_row([
         pessoa,
         tipo,
@@ -166,64 +222,27 @@ if st.button("Adicionar"):
     ])
 
     st.cache_data.clear()
+    st.success("Adicionado com sucesso")
     st.rerun()
 
 # =========================
-# 🗑 ELIMINAR
+# ELIMINAR
 # =========================
 st.markdown("---")
-st.subheader("🗑 Registos")
+st.subheader("🗑 Eliminar registos")
 
-df_user = df[df.get("Pessoa","") == modo]
+df_user = df[df["Pessoa"] == modo].sort_values("Data", ascending=False)
 
 for _, row in df_user.iterrows():
 
-    c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
+    c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
-    c1.write(row["Tipo"])
-    c2.write(row["Categoria"])
-    c3.write(row["Descrição"])
-    c4.write(row["Valor"])
+    c1.write(row["Pessoa"])
+    c2.write(row["Tipo"])
+    c3.write(row["Categoria"])
+    c4.write(f"€ {row['Valor']:.2f}")
 
-    if c5.button("❌", key=f"del_{row['sheet_row']}"):
-        sheet.delete_rows(row["sheet_row"])
-        st.cache_data.clear()
-        st.rerun()
-
-# =========================
-# 📅 HISTÓRICO MENSAL (NOVO)
-# =========================
-st.markdown("---")
-st.subheader("📅 Histórico mensal")
-
-df["Mes"] = pd.to_datetime(df["Data"]).dt.to_period("M").astype(str)
-
-hist = df.groupby("Mes")["Valor"].sum()
-
-st.line_chart(hist)
-
-# =========================
-# 📁 EXPORTAÇÃO (NOVO)
-# =========================
-st.markdown("---")
-st.subheader("📁 Exportar dados")
-
-csv = df.to_csv(index=False).encode("utf-8")
-
-st.download_button(
-    "Exportar CSV",
-    csv,
-    "finance.csv",
-    "text/csv"
-)
-
-# Excel
-output = io.BytesIO()
-with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-    df.to_excel(writer, index=False)
-
-st.download_button(
-    "Exportar Excel",
-    output.getvalue(),
-    "finance.xlsx"
-)
+    if c5.button("❌", key=row["sheet_row"]):
+        if delete_row_safe(row["sheet_row"]):
+            st.cache_data.clear()
+            st.rerun()
