@@ -27,13 +27,32 @@ try:
     )
 
     client = gspread.authorize(creds)
+
     sheet = client.open_by_key(
         "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
     ).sheet1
 
+    cat_sheet = client.open_by_key(
+        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+    ).worksheet("Categorias")
+
 except Exception as e:
     st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
     st.stop()
+
+# =========================
+# CATEGORIAS (DINÂMICAS)
+# =========================
+@st.cache_data(ttl=30)
+def load_categories():
+    data = cat_sheet.get_all_values()
+
+    if len(data) < 2:
+        return []
+
+    return [row[0] for row in data[1:] if row[0].strip() != ""]
+
+categories = load_categories()
 
 # =========================
 # DATA
@@ -69,7 +88,6 @@ def load_data():
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
 
     df["sheet_row"] = df.index + 2
-    df["MesAno"] = pd.to_datetime(df["Data"]).dt.strftime("%m/%Y")
 
     return df
 
@@ -77,86 +95,25 @@ def load_data():
 df = load_data()
 
 # =========================
-# CICLO POR SALÁRIO
+# DELETE
 # =========================
-def get_last_salary(df, pessoa):
-    df_p = df[
-        (df["Pessoa"] == pessoa) &
-        (df["Tipo"] == "Salário")
-    ]
-
-    if df_p.empty:
-        return None
-
-    return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
-
-
-def filtrar_ciclo(df, pessoa):
-    last_salary = get_last_salary(df, pessoa)
-
-    if not last_salary:
-        return df[df["Pessoa"] == pessoa]
-
-    return df[
-        (df["Pessoa"] == pessoa) &
-        (df["Data"] >= last_salary)
-    ]
-
-# =========================
-# DELETE SEGURO
-# =========================
-def delete_row_safe(target_row):
+def delete_row_safe(row):
     try:
-        sheet.delete_rows(int(target_row))
+        sheet.delete_rows(int(row))
         return True
     except Exception as e:
         st.error(f"Erro ao eliminar: {e}")
         return False
 
 # =========================
-# DASHBOARD
+# MODO
 # =========================
-def mostrar_dashboard(df_pessoa, pessoa):
-    st.markdown(f"## 📈 Dashboard de {pessoa}")
+modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
-    receitas = df_pessoa[df_pessoa["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
-    despesas = df_pessoa[df_pessoa["Tipo"] == "Despesa"]
-
-    total_receitas = receitas["Valor"].sum()
-    total_despesas = despesas["Valor"].sum()
-    saldo = total_receitas - total_despesas
-
-    maior_categoria = "—"
-
-    if not despesas.empty:
-        top = despesas.groupby("Categoria")["Valor"].sum().sort_values(ascending=False)
-        if not top.empty:
-            maior_categoria = top.index[0]
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    c1.metric("💰 Receitas", f"€ {total_receitas:.2f}")
-    c2.metric("💸 Despesas", f"€ {total_despesas:.2f}")
-    c3.metric("🏦 Saldo", f"€ {saldo:.2f}")
-    c4.metric("🔥 Maior Gasto", maior_categoria)
-
-    if not despesas.empty:
-        st.bar_chart(despesas.groupby("Categoria")["Valor"].sum())
-
-    st.markdown("---")
-
-# =========================
-# ICONS
-# =========================
 avatars = {
     "Ruben": "🤴",
     "Gabi": "👸"
 }
-
-# =========================
-# MODO
-# =========================
-modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
 # CASAL
@@ -168,36 +125,13 @@ if modo == "Casal":
     for pessoa in ["Ruben", "Gabi"]:
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        df_p = filtrar_ciclo(df, pessoa)
-        mostrar_dashboard(df_p, pessoa)
+        df_p = df[df["Pessoa"] == pessoa]
 
-    # =========================
-    # 📤 EXPORTAÇÃO (SÓ CASAL)
-    # =========================
-    st.markdown("---")
-    st.subheader("📤 Exportação de Dados")
+        receitas = df_p[df_p["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
+        despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-    opcao = st.selectbox(
-        "O que queres exportar?",
-        ["Casal (Tudo)", "Ruben", "Gabi"]
-    )
-
-    if opcao == "Casal (Tudo)":
-        export_df = df.copy()
-    else:
-        export_df = df[df["Pessoa"] == opcao].copy()
-
-    if "sheet_row" in export_df.columns:
-        export_df = export_df.drop(columns=["sheet_row"])
-
-    csv = export_df.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        label="⬇️ Descarregar CSV",
-        data=csv,
-        file_name=f"financeiro_{opcao}_{datetime.today().strftime('%Y_%m_%d')}.csv",
-        mime="text/csv"
-    )
+        st.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
+        st.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
 
     st.stop()
 
@@ -208,40 +142,36 @@ st.subheader(f"{avatars[modo]} {modo}")
 
 pessoa = modo
 
-df_pessoal = filtrar_ciclo(df, pessoa)
-mostrar_dashboard(df_pessoal, pessoa)
-
-# =========================
-# ADICIONAR
-# =========================
-tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
+tipo = st.selectbox(
+    "Tipo",
+    ["Salário", "Subsídio Alimentação", "Despesa"]
+)
 
 categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
-    categoria = st.selectbox(
-        "Categoria",
-        ["Renda", "Vodafone", "Gasolina", "Alimentação", "Luz", "Água", "Outros"]
-    )
 
-    if categoria == "Outros":
-        descricao = st.text_input("Descrição obrigatória")
+    if categories:
+        categoria = st.selectbox("Categoria", categories)
+    else:
+        categoria = st.text_input("Categoria (cria categorias na aba 'Categorias')")
+
+    descricao = st.text_input("Descrição")
 
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
-if data > datetime.today().date():
-    st.error("Não podes escolher data futura")
-    st.stop()
-
 if st.button("Adicionar"):
 
-    if tipo == "Despesa" and categoria == "Outros" and descricao.strip() == "":
-        st.error("❌ Tens de preencher descrição")
-        st.stop()
-
-    sheet.append_row([pessoa, tipo, categoria, descricao, float(valor), str(data)])
+    sheet.append_row([
+        pessoa,
+        tipo,
+        categoria,
+        descricao,
+        float(valor),
+        str(data)
+    ])
 
     st.cache_data.clear()
     st.success("Adicionado com sucesso")
@@ -264,8 +194,7 @@ for _, row in df_user.iterrows():
     c3.write(row["Categoria"])
     c4.write(f"€ {row['Valor']:.2f}")
 
-    if c5.button("❌", key=f"del_{row['sheet_row']}"):
+    if c5.button("❌", key=row["sheet_row"]):
         if delete_row_safe(row["sheet_row"]):
             st.cache_data.clear()
-            st.success("Eliminado")
             st.rerun()
