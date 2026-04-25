@@ -36,7 +36,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CACHE (🔥 FIX DO ERRO 429)
+# CACHE
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -53,9 +53,6 @@ def load_data():
 
     return df
 
-# =========================
-# SAVE
-# =========================
 def guardar(d):
     sheet.append_row([
         d["Pessoa"],
@@ -66,10 +63,20 @@ def guardar(d):
         str(d["Data"])
     ])
 
-# =========================
-# LOAD (AGORA COM CACHE)
-# =========================
 df = load_data()
+
+# =========================
+# ÍCONES
+# =========================
+icons = {
+    "Renda": "🏠",
+    "Vodafone": "📱",
+    "Gasolina": "🚗",
+    "Alimentação": "🛒",
+    "Luz": "💡",
+    "Água": "🚿",
+    "Outros": "📦"
+}
 
 # =========================
 # MODO
@@ -85,7 +92,7 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# CASAL (SÓ LEITURA)
+# CASAL (VISUAL LIMPO)
 # =========================
 if modo == "Casal":
 
@@ -101,12 +108,6 @@ if modo == "Casal":
     c3.metric("⚖️ Saldo", f"€ {saldo:.2f}")
 
     st.markdown("---")
-
-    st.subheader("📈 Receitas")
-    st.bar_chart(df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])].groupby("Pessoa")["Valor"].sum())
-
-    st.subheader("📉 Despesas")
-    st.bar_chart(df[df["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum())
 
     st.stop()
 
@@ -125,7 +126,7 @@ descricao = ""
 if tipo == "Despesa":
     categoria = st.selectbox(
         "Categoria",
-        ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"],
+        list(icons.keys()),
         key="cat_add"
     )
 
@@ -145,8 +146,45 @@ if st.button("Adicionar", key="btn_add"):
         "Data": data
     })
 
-    # 🔥 IMPORTANTE: limpa cache para atualizar dados
     st.cache_data.clear()
-
     st.success("Adicionado com sucesso")
     st.rerun()
+
+# =========================
+# TABELAS LIMPAS (RUBEN / GABI)
+# =========================
+st.markdown("---")
+st.subheader(f"📋 Registos de {modo}")
+
+receitas = df_view[df_view["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+despesas = df_view[df_view["Tipo"] == "Despesa"]
+
+# -------------------------
+# RECEITAS
+# -------------------------
+st.markdown("### 💰 Receitas")
+
+if not receitas.empty:
+    receitas_tabela = receitas[["Tipo", "Valor"]].groupby("Tipo").sum().reset_index()
+    st.table(receitas_tabela)
+else:
+    st.info("Sem receitas")
+
+# -------------------------
+# DESPESAS
+# -------------------------
+st.markdown("### 💸 Despesas")
+
+if not despesas.empty:
+
+    despesas["Icon"] = despesas["Categoria"].map(icons)
+
+    tabela = despesas[["Categoria", "Valor"]].copy()
+    tabela["Categoria"] = tabela["Categoria"].map(icons) + " " + tabela["Categoria"]
+
+    tabela = tabela.groupby("Categoria").sum().reset_index()
+
+    st.table(tabela)
+
+else:
+    st.info("Sem despesas")
