@@ -66,10 +66,7 @@ def load_data():
     df["Categoria"] = df["Categoria"].astype(str).str.strip()
     df["Descrição"] = df["Descrição"].astype(str).fillna("")
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-    df["Data"] = pd.to_datetime(
-        df["Data"],
-        errors="coerce"
-    ).dt.date
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
 
     df["sheet_row"] = df.index + 2
     df["MesAno"] = pd.to_datetime(df["Data"]).dt.strftime("%m/%Y")
@@ -152,7 +149,6 @@ def mostrar_dashboard(df_pessoa, pessoa):
             .sum()
             .sort_values(ascending=False)
         )
-
         if not maior.empty:
             maior_categoria = maior.index[0]
 
@@ -172,83 +168,7 @@ def mostrar_dashboard(df_pessoa, pessoa):
             .reset_index()
         )
 
-        st.bar_chart(
-            grafico.set_index("Categoria")
-        )
-
-    st.markdown("---")
-
-# =========================
-# HISTÓRICO MENSAL
-# =========================
-def mostrar_historico_mensal(df, pessoa):
-    st.markdown("## 📅 Histórico Mensal")
-
-    df_pessoa = df[df["Pessoa"] == pessoa].copy()
-
-    if df_pessoa.empty:
-        st.info("Sem histórico disponível")
-        return
-
-    meses = sorted(
-        df_pessoa["MesAno"].dropna().unique(),
-        reverse=True
-    )
-
-    mes_escolhido = st.selectbox(
-        "Seleciona o mês",
-        meses
-    )
-
-    df_mes = df_pessoa[
-        df_pessoa["MesAno"] == mes_escolhido
-    ]
-
-    receitas = df_mes[
-        df_mes["Tipo"].isin(
-            ["Salário", "Subsídio Alimentação"]
-        )
-    ]
-
-    despesas = df_mes[
-        df_mes["Tipo"] == "Despesa"
-    ]
-
-    total_receitas = receitas["Valor"].sum()
-    total_despesas = despesas["Valor"].sum()
-    saldo = total_receitas - total_despesas
-
-    maior_categoria = "—"
-
-    if not despesas.empty:
-        top = (
-            despesas.groupby("Categoria")["Valor"]
-            .sum()
-            .sort_values(ascending=False)
-        )
-
-        if not top.empty:
-            maior_categoria = top.index[0]
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    c1.metric("💰 Receitas", f"€ {total_receitas:.2f}")
-    c2.metric("💸 Despesas", f"€ {total_despesas:.2f}")
-    c3.metric("🏦 Saldo", f"€ {saldo:.2f}")
-    c4.metric("🔥 Maior Gasto", maior_categoria)
-
-    if not despesas.empty:
-        st.markdown("### 📊 Despesas do mês")
-
-        grafico = (
-            despesas.groupby("Categoria")["Valor"]
-            .sum()
-            .reset_index()
-        )
-
-        st.bar_chart(
-            grafico.set_index("Categoria")
-        )
+        st.bar_chart(grafico.set_index("Categoria"))
 
     st.markdown("---")
 
@@ -282,7 +202,6 @@ if modo == "Casal":
         df_p = filtrar_ciclo(df, pessoa)
 
         mostrar_dashboard(df_p, pessoa)
-        mostrar_historico_mensal(df, pessoa)
 
     st.stop()
 
@@ -292,11 +211,9 @@ if modo == "Casal":
 st.subheader(f"{avatars[modo]} {modo}")
 
 pessoa = modo
-
 df_pessoal = filtrar_ciclo(df, pessoa)
 
 mostrar_dashboard(df_pessoal, pessoa)
-mostrar_historico_mensal(df, pessoa)
 
 # =========================
 # ADICIONAR
@@ -324,19 +241,10 @@ if tipo == "Despesa":
     )
 
     if categoria == "Outros":
-        descricao = st.text_input(
-            "Descrição obrigatória"
-        )
+        descricao = st.text_input("Descrição obrigatória")
 
-valor = st.number_input(
-    "Valor (€)",
-    min_value=0.0
-)
-
-data = st.date_input(
-    "Data",
-    datetime.today()
-)
+valor = st.number_input("Valor (€)", min_value=0.0)
+data = st.date_input("Data", datetime.today())
 
 if data > datetime.today().date():
     st.error("Não podes escolher data futura")
@@ -349,9 +257,7 @@ if st.button("Adicionar"):
         and categoria == "Outros"
         and descricao.strip() == ""
     ):
-        st.error(
-            "❌ Tens de preencher a descrição quando escolheste 'Outros'"
-        )
+        st.error("❌ Tens de preencher a descrição quando escolheste 'Outros'")
         st.stop()
 
     sheet.append_row([
@@ -368,43 +274,70 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# ELIMINAR
+# 🗑 ELIMINAR
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
 
-df_user = df[
-    df["Pessoa"] == modo
-].sort_values(
-    "Data",
-    ascending=False
-)
+df_user = df[df["Pessoa"] == modo].sort_values("Data", ascending=False)
 
 for _, row in df_user.iterrows():
 
-    c1, c2, c3, c4, c5 = st.columns(
-        [2, 3, 2, 2, 1]
-    )
+    c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
-    c1.write(row.get("Pessoa", ""))
-    c2.write(row.get("Tipo", ""))
-    c3.write(row.get("Categoria", ""))
-    c4.write(f"€ {row.get('Valor', 0):.2f}")
+    c1.write(row.get("Pessoa",""))
+    c2.write(row.get("Tipo",""))
+    c3.write(row.get("Categoria",""))
+    c4.write(f"€ {row.get('Valor',0):.2f}")
 
-    if c5.button(
-        "❌",
-        key=f"del_{row['sheet_row']}"
-    ):
+    if c5.button("❌", key=f"del_{row['sheet_row']}"):
 
-        deleted = delete_row_safe(
-            row["sheet_row"]
-        )
+        deleted = delete_row_safe(row["sheet_row"])
 
         if deleted:
             st.cache_data.clear()
             st.success("Registo eliminado com sucesso")
             st.rerun()
         else:
-            st.error(
-                "Não foi possível eliminar o registo"
-            )
+            st.error("Não foi possível eliminar o registo")
+
+# =========================
+# 📤 EXPORTAÇÃO (NOVO - PONTO 5)
+# =========================
+st.markdown("---")
+st.subheader("📤 Exportar dados")
+
+export_df = df.copy()
+
+if "sheet_row" in export_df.columns:
+    export_df = export_df.drop(columns=["sheet_row"])
+
+csv = export_df.to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    label="⬇️ Descarregar CSV completo",
+    data=csv,
+    file_name=f"financeiro_{datetime.today().strftime('%Y_%m_%d')}.csv",
+    mime="text/csv"
+)
+
+st.markdown("### 👤 Exportar por pessoa")
+
+pessoa_export = st.selectbox(
+    "Escolhe pessoa",
+    ["Ruben", "Gabi"]
+)
+
+df_pessoa_export = df[df["Pessoa"] == pessoa_export].copy()
+
+if "sheet_row" in df_pessoa_export.columns:
+    df_pessoa_export = df_pessoa_export.drop(columns=["sheet_row"])
+
+csv_pessoa = df_pessoa_export.to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    label=f"⬇️ Descarregar CSV de {pessoa_export}",
+    data=csv_pessoa,
+    file_name=f"{pessoa_export}_financeiro_{datetime.today().strftime('%Y_%m_%d')}.csv",
+    mime="text/csv"
+)
