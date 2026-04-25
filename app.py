@@ -67,17 +67,23 @@ def guardar(d):
 df = load_data()
 
 # =========================
-# FILTRO SIMPLES
+# 🔀 MODO DE VISÃO (CASAL / INDIVIDUAL)
 # =========================
-st.sidebar.header("🔍 Filtros")
+st.sidebar.header("👁️ Modo de visualização")
 
-pessoa_f = st.sidebar.selectbox("Pessoa", ["Todos", "Ruben", "Gabi"])
+modo = st.sidebar.selectbox(
+    "Escolhe modo",
+    ["Casal (Tudo)", "Ruben", "Gabi"]
+)
 
+# FILTRO BASE
 df_view = df.copy()
 
 if not df_view.empty:
-    if pessoa_f != "Todos":
-        df_view = df_view[df_view["Pessoa"] == pessoa_f]
+    if modo == "Ruben":
+        df_view = df_view[df_view["Pessoa"] == "Ruben"]
+    elif modo == "Gabi":
+        df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
 # NOVO REGISTO
@@ -132,23 +138,51 @@ if not df_view.empty:
     saldo = receitas - despesas
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Receitas", f"€ {receitas:.2f}")
-    c2.metric("Despesas", f"€ {despesas:.2f}")
-    c3.metric("Saldo", f"€ {saldo:.2f}")
+    c1.metric("💰 Receitas", f"€ {receitas:.2f}")
+    c2.metric("💸 Despesas", f"€ {despesas:.2f}")
+    c3.metric("⚖️ Saldo", f"€ {saldo:.2f}")
 
+    # ALERTA SIMPLES
     if saldo < 0:
-        st.error("⚠️ Estão a gastar mais do que recebem")
+        st.error("⚠️ Gastos acima dos ganhos")
     elif saldo < 200:
-        st.warning("⚠️ Atenção ao saldo")
+        st.warning("⚠️ Saldo baixo")
     else:
         st.success("✔ Situação estável")
 
     st.markdown("---")
 
     # =========================
+    # GASTOS POR CATEGORIA
+    # =========================
+    st.subheader("📉 Onde o dinheiro vai")
+
+    gastos = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
+    gastos = gastos.sort_values("Valor", ascending=False)
+
+    if not gastos.empty:
+        for _, row in gastos.iterrows():
+            st.write(f"💳 **{row['Categoria']}** → € {row['Valor']:.2f}")
+
+    st.markdown("---")
+
+    # =========================
+    # POR PESSOA (SÓ NO MODO CASAL)
+    # =========================
+    if modo == "Casal (Tudo)":
+        st.subheader("👤 Gastos por pessoa")
+
+        por_pessoa = df_view.groupby("Pessoa")["Valor"].sum().reset_index()
+
+        for _, row in por_pessoa.iterrows():
+            st.write(f"👤 **{row['Pessoa']}** → € {row['Valor']:.2f}")
+
+    st.markdown("---")
+
+    # =========================
     # EDITAR / ELIMINAR
     # =========================
-    st.subheader("✏️ Editar / Eliminar registos")
+    st.subheader("✏️ Editar / Eliminar")
 
     raw = sheet.get_all_values()
     headers = raw[0]
@@ -156,85 +190,81 @@ if not df_view.empty:
 
     data = []
     for i, r in enumerate(rows, start=2):
-        data.append({
-            "linha": i,
-            "Pessoa": r[0],
-            "Tipo": r[1],
-            "Categoria": r[2],
-            "Descrição": r[3],
-            "Valor": r[4],
-            "Data": r[5]
-        })
+        if len(r) >= 6:
+            data.append({
+                "linha": i,
+                "Pessoa": r[0],
+                "Tipo": r[1],
+                "Categoria": r[2],
+                "Descrição": r[3],
+                "Valor": r[4],
+                "Data": r[5]
+            })
 
     df_edit = pd.DataFrame(data)
 
-    idx = st.selectbox("Seleciona registo", df_edit.index)
+    if not df_edit.empty:
 
-    row = df_edit.loc[idx]
-    linha = int(row["linha"])
+        idx = st.selectbox("Seleciona registo", df_edit.index)
+        row = df_edit.loc[idx]
+        linha = int(row["linha"])
 
-    # =========================
-    # ELIMINAR
-    # =========================
-    st.markdown("### 🗑️ Eliminar")
+        # ELIMINAR
+        st.markdown("### 🗑️ Eliminar")
+        if st.checkbox("Confirmo eliminação"):
+            if st.button("Eliminar"):
+                sheet.delete_rows(linha)
+                st.success("Eliminado")
+                st.rerun()
 
-    confirmar = st.checkbox("Confirmo que quero eliminar este registo")
+        st.markdown("---")
 
-    if confirmar:
-        if st.button("Eliminar registo"):
-            sheet.delete_rows(linha)
-            st.success("Registo eliminado")
-            st.rerun()
+        # EDITAR
+        st.markdown("### ✏️ Editar")
 
-    st.markdown("---")
-
-    # =========================
-    # EDITAR
-    # =========================
-    st.markdown("### ✏️ Editar")
-
-    pessoa_e = st.selectbox(
-        "Pessoa",
-        ["Ruben","Gabi"],
-        index=["Ruben","Gabi"].index(row["Pessoa"]),
-        key=f"p_{linha}"
-    )
-
-    tipo_e = st.selectbox(
-        "Tipo",
-        ["Salário","Subsídio Alimentação","Despesa"],
-        index=["Salário","Subsídio Alimentação","Despesa"].index(row["Tipo"]),
-        key=f"t_{linha}"
-    )
-
-    categoria_e = row["Categoria"]
-    descricao_e = row["Descrição"]
-
-    if tipo_e == "Despesa":
-        categoria_e = st.selectbox(
-            "Categoria",
-            ["Renda","Água","Luz","Vodafone","Alimentação","Gasolina","Outros"],
-            key=f"c_{linha}"
+        pessoa_e = st.selectbox(
+            "Pessoa",
+            ["Ruben","Gabi"],
+            index=["Ruben","Gabi"].index(row["Pessoa"]),
+            key=f"p_{linha}"
         )
 
-        if categoria_e == "Outros":
-            descricao_e = st.text_input("Descrição", value=row["Descrição"], key=f"d_{linha}")
+        tipo_e = st.selectbox(
+            "Tipo",
+            ["Salário","Subsídio Alimentação","Despesa"],
+            index=["Salário","Subsídio Alimentação","Despesa"].index(row["Tipo"]),
+            key=f"t_{linha}"
+        )
 
-    valor_e = st.number_input("Valor", value=float(row["Valor"]), key=f"v_{linha}")
+        categoria_e = row["Categoria"]
+        descricao_e = row["Descrição"]
 
-    if st.button("Guardar alterações", key=f"s_{linha}"):
-        sheet.update(f"A{linha}:H{linha}", [[
-            pessoa_e,
-            tipo_e,
-            categoria_e,
-            descricao_e,
-            valor_e,
-            row["Data"],
-            0,
-            0
-        ]])
-        st.success("Atualizado")
-        st.rerun()
+        if tipo_e == "Despesa":
+            categoria_e = st.selectbox(
+                "Categoria",
+                ["Renda","Água","Luz","Vodafone","Alimentação","Gasolina","Outros"],
+                key=f"c_{linha}"
+            )
+
+        valor_e = st.number_input(
+            "Valor",
+            value=float(row["Valor"]),
+            key=f"v_{linha}"
+        )
+
+        if st.button("Guardar alterações", key=f"s_{linha}"):
+            sheet.update(f"A{linha}:H{linha}", [[
+                pessoa_e,
+                tipo_e,
+                categoria_e,
+                descricao_e,
+                valor_e,
+                row["Data"],
+                0,
+                0
+            ]])
+            st.success("Atualizado")
+            st.rerun()
 
 else:
     st.info("Sem dados ainda")
