@@ -32,16 +32,25 @@ try:
         "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
     ).sheet1
 
-    cat_sheet = client.open_by_key(
-        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-    ).worksheet("Categorias")
+    # =========================
+    # CATEGORIAS (SEGURAS)
+    # =========================
+    try:
+        cat_sheet = client.open_by_key(
+            "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+        ).worksheet("Categorias")
+
+    except Exception:
+        st.error("❌ A aba 'Categorias' não existe no Google Sheets.")
+        st.info("👉 Cria uma nova folha com o nome EXATO: Categorias")
+        st.stop()
 
 except Exception as e:
     st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
     st.stop()
 
 # =========================
-# CATEGORIAS (DINÂMICAS)
+# CATEGORIAS
 # =========================
 @st.cache_data(ttl=30)
 def load_categories():
@@ -130,8 +139,10 @@ if modo == "Casal":
         receitas = df_p[df_p["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-        st.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
-        st.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
+        c1, c2 = st.columns(2)
+
+        c1.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
+        c2.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
 
     st.stop()
 
@@ -155,7 +166,7 @@ if tipo == "Despesa":
     if categories:
         categoria = st.selectbox("Categoria", categories)
     else:
-        categoria = st.text_input("Categoria (cria categorias na aba 'Categorias')")
+        categoria = st.text_input("Categoria (cria na aba 'Categorias')")
 
     descricao = st.text_input("Descrição")
 
