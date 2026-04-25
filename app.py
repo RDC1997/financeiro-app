@@ -35,7 +35,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CACHE
+# DATA
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -50,7 +50,6 @@ def load_data():
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
 
-    # 🔧 DATA LIMPA
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
     return df
@@ -68,7 +67,7 @@ def guardar(d):
 df = load_data()
 
 # =========================
-# ÍCONES
+# ICONS
 # =========================
 icons = {
     "Renda": "🏠",
@@ -91,61 +90,77 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 📅 FILTRO POR MÊS
+# FILTRO MÊS
 # =========================
-if not df.empty and "Data" in df.columns:
-    meses = sorted(df["Data"].dropna().dt.to_period("M").unique().astype(str))
-    mes_escolhido = st.sidebar.selectbox("Mês", ["Atual"] + meses)
+if not df.empty:
+    df["Mes"] = df["Data"].dt.to_period("M").astype(str)
 
-    if mes_escolhido == "Atual":
-        hoje = pd.Timestamp.today().to_period("M")
-        df = df[df["Data"].dt.to_period("M") == hoje]
+    meses = sorted(df["Mes"].dropna().unique())
+    mes = st.sidebar.selectbox("Mês", ["Atual"] + meses)
+
+    if mes == "Atual":
+        atual = pd.Timestamp.today().to_period("M").astype(str)
+        df = df[df["Mes"] == atual]
     else:
-        df = df[df["Data"].dt.to_period("M").astype(str) == mes_escolhido]
+        df = df[df["Mes"] == mes]
 
 # =========================
-# 🟢 CASAL (DASHBOARD LIMPO)
+# 🟢 CASAL
 # =========================
 if modo == "Casal":
 
-    st.subheader("📊 Dashboard Mensal")
+    st.subheader("📊 Dashboard")
 
-    receitas = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]["Valor"].sum()
-    despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
-    saldo = receitas - despesas
+    receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+    despesas = df[df["Tipo"] == "Despesa"]
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("💰 Receitas", f"€ {receitas:.2f}")
-    col2.metric("💸 Despesas", f"€ {despesas:.2f}")
-    col3.metric("⚖️ Saldo", f"€ {saldo:.2f}")
+    col1.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
+    col2.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
+    col3.metric("⚖️ Saldo", f"€ {(receitas['Valor'].sum() - despesas['Valor'].sum()):.2f}")
 
     st.markdown("---")
 
-    for pessoa in ["Ruben", "Gabi"]:
+    # =========================
+    # 🔵 DETALHE RECEITAS
+    # =========================
+    st.markdown("## 💰 Receitas (detalhe)")
+    if not receitas.empty:
+        st.table(receitas[["Pessoa","Tipo","Valor","Data"]])
+    else:
+        st.info("Sem receitas")
 
-        st.markdown(f"## {avatars[pessoa]} {pessoa}")
+    # =========================
+    # 🔴 DETALHE DESPESAS
+    # =========================
+    st.markdown("## 💸 Despesas (detalhe)")
 
-        df_p = df[df["Pessoa"] == pessoa]
+    if not despesas.empty:
 
-        r = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
-        d = df_p[df_p["Tipo"] == "Despesa"]["Valor"].sum()
+        despesas = despesas.copy()
 
-        c1, c2 = st.columns(2)
-        c1.metric("💰 Receitas", f"€ {r:.2f}")
-        c2.metric("💸 Despesas", f"€ {d:.2f}")
+        despesas["Categoria"] = despesas.apply(
+            lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
+            if r["Categoria"] == "Outros"
+            else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
+            axis=1
+        )
 
-        st.markdown("---")
+        st.table(despesas[["Pessoa","Categoria","Valor","Data"]])
+
+    else:
+        st.info("Sem despesas")
 
     st.stop()
 
 # =========================
-# 🔵 GESTÃO (R / G)
+# 🔵 GESTÃO
 # =========================
 st.subheader("➕ Novo registo")
 
 pessoa = modo
 
-tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
+tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
 
 categoria = ""
 descricao = ""
