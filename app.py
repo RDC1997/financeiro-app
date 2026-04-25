@@ -45,7 +45,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CATEGORIAS
+# CATEGORIAS (RESTAURADO COMPLETO)
 # =========================
 @st.cache_data(ttl=10)
 def load_categories():
@@ -74,14 +74,12 @@ categories = load_categories()
 @st.cache_data(ttl=10)
 def load_goals():
     data = goals_sheet.get_all_values()
-
     if len(data) < 2:
         return pd.DataFrame(columns=["Nome","Objetivo","Atual"])
 
     df = pd.DataFrame(data[1:], columns=data[0])
     df["Objetivo"] = pd.to_numeric(df["Objetivo"], errors="coerce").fillna(0)
     df["Atual"] = pd.to_numeric(df["Atual"], errors="coerce").fillna(0)
-
     return df
 
 goals = load_goals()
@@ -93,24 +91,16 @@ goals = load_goals()
 def load_data():
     raw = sheet.get_all_values()
 
-    expected_cols = [
-        "Pessoa",
-        "Tipo",
-        "Categoria",
-        "Descrição",
-        "Valor",
-        "Data"
-    ]
+    cols = ["Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
 
     if not raw or len(raw) < 2:
-        return pd.DataFrame(columns=expected_cols)
+        return pd.DataFrame(columns=cols)
 
-    headers = [h.strip() for h in raw[0]]
-    df = pd.DataFrame(raw[1:], columns=headers)
+    df = pd.DataFrame(raw[1:], columns=raw[0])
 
-    for col in expected_cols:
-        if col not in df.columns:
-            df[col] = ""
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Tipo"] = df["Tipo"].astype(str).str.strip()
@@ -120,13 +110,12 @@ def load_data():
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
 
     df["sheet_row"] = df.index + 2
-
     return df
 
 df = load_data()
 
 # =========================
-# DELETE
+# DELETE SAFE
 # =========================
 def delete_row_safe(row):
     try:
@@ -137,9 +126,9 @@ def delete_row_safe(row):
         return False
 
 # =========================
-# SIDEBAR
+# MENU
 # =========================
-st.sidebar.markdown("## ⚙️ Menu")
+st.sidebar.markdown("## 📊 Menu")
 
 modo = st.sidebar.selectbox(
     "Escolhe área",
@@ -152,42 +141,65 @@ modo = st.sidebar.selectbox(
 )
 
 # =========================
+# SIDEBAR CATEGORIAS (RESTAURADO)
+# =========================
+st.sidebar.markdown("## ⚙️ Categorias")
+
+with st.sidebar.expander("➕ Adicionar categoria"):
+    nova = st.text_input("Nova categoria")
+
+    if st.button("Adicionar"):
+        if nova.strip():
+            add_category(nova.strip())
+            st.cache_data.clear()
+            st.rerun()
+
+with st.sidebar.expander("❌ Remover categoria"):
+    if categories:
+        cat = st.selectbox("Escolhe categoria", categories)
+        if st.button("Remover"):
+            delete_category(cat)
+            st.cache_data.clear()
+            st.rerun()
+
+with st.sidebar.expander("📋 Lista"):
+    st.write(categories)
+
+# =========================
 # CASAL
 # =========================
 if modo == "👩‍❤️‍👨 Casal":
 
-    st.subheader("📊 Visão Geral (Ciclos por salário)")
+    st.subheader("📊 Casal - Ciclos por salário")
 
     def get_last_salary(df, pessoa):
-        df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
-        if df_p.empty:
+        d = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
+        if d.empty:
             return None
-        return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
+        return d.sort_values("Data", ascending=False).iloc[0]["Data"]
 
-    def filtrar_ciclo(df, pessoa):
-        last_salary = get_last_salary(df, pessoa)
-
-        if not last_salary:
+    def filtrar(df, pessoa):
+        last = get_last_salary(df, pessoa)
+        if not last:
             return df[df["Pessoa"] == pessoa]
+        return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last)]
 
-        return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
-
-    for pessoa in ["Ruben", "Gabi"]:
-
-        df_p = filtrar_ciclo(df, pessoa)
+    for pessoa in ["Ruben","Gabi"]:
 
         st.markdown(f"## {pessoa}")
+
+        df_p = filtrar(df, pessoa)
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-        st.markdown("### 💰 Receitas")
+        st.write("### Receitas")
         st.dataframe(receitas)
 
-        st.markdown("### 💸 Despesas")
+        st.write("### Despesas")
         st.dataframe(despesas)
 
-        st.markdown(f"**Total: € {despesas['Valor'].sum():.2f}**")
+        st.write(f"💰 Total: € {despesas['Valor'].sum():.2f}")
 
     st.stop()
 
@@ -213,18 +225,14 @@ categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
-    if categories:
-        categoria = st.selectbox("Categoria", categories)
-    else:
-        categoria = st.text_input("Categoria")
-
+    categoria = st.selectbox("Categoria", categories) if categories else st.text_input("Categoria")
     descricao = st.text_input("Descrição")
 
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 if st.button("Adicionar"):
-    sheet.append_row([pessoa, tipo, categoria, descricao, float(valor), str(data)])
+    sheet.append_row([pessoa,tipo,categoria,descricao,float(valor),str(data)])
     st.cache_data.clear()
     st.rerun()
 
@@ -238,7 +246,7 @@ df_user = df[df["Pessoa"] == pessoa]
 
 for _, row in df_user.iterrows():
 
-    c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
+    c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
 
     c1.write(row["Pessoa"])
     c2.write(row["Tipo"])
