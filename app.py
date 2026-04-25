@@ -36,7 +36,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CACHE
+# CACHE (ANTI 429)
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -66,7 +66,7 @@ def guardar(d):
 df = load_data()
 
 # =========================
-# ÍCONES
+# ÍCONES CATEGORIAS
 # =========================
 icons = {
     "Renda": "🏠",
@@ -76,6 +76,14 @@ icons = {
     "Luz": "💡",
     "Água": "🚿",
     "Outros": "📦"
+}
+
+# =========================
+# 👑 AVATARES REI & RAINHA
+# =========================
+avatars = {
+    "Ruben": "🤴",
+    "Gabi": "👸"
 }
 
 # =========================
@@ -100,7 +108,7 @@ if modo == "Casal":
 
     for pessoa in ["Ruben", "Gabi"]:
 
-        st.markdown(f"## 👤 {pessoa}")
+        st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
         df_pessoa = df[df["Pessoa"] == pessoa]
 
@@ -124,12 +132,10 @@ if modo == "Casal":
         st.markdown("### 💸 Despesas")
 
         if not despesas.empty:
+            despesas = despesas.copy()
+            despesas["Categoria"] = despesas["Categoria"].map(icons) + " " + despesas["Categoria"]
 
-            tabela_d = despesas.copy()
-            tabela_d["Categoria"] = tabela_d["Categoria"].map(icons) + " " + tabela_d["Categoria"]
-
-            tabela_d = tabela_d[["Categoria", "Valor"]].groupby("Categoria").sum().reset_index()
-
+            tabela_d = despesas[["Categoria", "Valor"]].groupby("Categoria").sum().reset_index()
             st.table(tabela_d)
 
         else:
@@ -140,7 +146,7 @@ if modo == "Casal":
     st.stop()
 
 # =========================
-# 🔵 R / G (GESTÃO)
+# 🔵 GESTÃO (RUBEN / GABI)
 # =========================
 st.subheader("➕ Novo registo")
 
