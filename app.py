@@ -29,7 +29,7 @@ try:
     client = gspread.authorize(creds)
     sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
 
-except Exception as e:
+except Exception:
     st.error("❌ Erro ao ligar ao Google Sheets")
     st.stop()
 
@@ -48,11 +48,7 @@ def load_data():
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-
-    # 📅 sem hora
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
-
-    df["sheet_row"] = df.index + 2
 
     return df
 
@@ -82,7 +78,7 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# CASAL
+# 🟢 CASAL
 # =========================
 if modo == "Casal":
 
@@ -93,22 +89,10 @@ if modo == "Casal":
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
         df_p = df[df["Pessoa"] == pessoa]
-
-        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
         # =========================
-        # 💰 RECEITAS (CORRIGIDO)
-        # =========================
-        st.markdown("### 💰 Receitas")
-
-        if not receitas.empty:
-            st.table(receitas[["Tipo","Valor","Data"]])
-        else:
-            st.info("Sem receitas")
-
-        # =========================
-        # 💸 DESPESAS (CORRIGIDO)
+        # 💸 DESPESAS
         # =========================
         st.markdown("### 💸 Despesas")
 
@@ -117,13 +101,25 @@ if modo == "Casal":
             despesas = despesas.copy()
 
             despesas["Categoria"] = despesas.apply(
-                lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
-                if r["Categoria"] == "Outros"
-                else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
+                lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
                 axis=1
             )
 
             st.table(despesas[["Categoria","Valor","Data"]])
+
+            # =========================
+            # 🏆 RANKING (NOVO)
+            # =========================
+            st.markdown("### 🏆 Ranking de Gastos")
+
+            ranking = (
+                despesas.groupby("Categoria")["Valor"]
+                .sum()
+                .sort_values(ascending=False)
+                .reset_index()
+            )
+
+            st.table(ranking)
 
         else:
             st.info("Sem despesas")
@@ -131,7 +127,7 @@ if modo == "Casal":
     st.stop()
 
 # =========================
-# GESTÃO
+# 🔵 GESTÃO
 # =========================
 st.subheader(f"➕ Novo registo ({modo})")
 
@@ -151,7 +147,7 @@ if tipo == "Despesa":
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
-# ❌ BLOQUEIO DATA FUTURA
+# ❌ bloquear datas futuras
 if data > datetime.today().date():
     st.error("Não podes escolher data futura")
     st.stop()
@@ -169,24 +165,3 @@ if st.button("Adicionar"):
     st.cache_data.clear()
     st.success("Adicionado com sucesso")
     st.rerun()
-
-# =========================
-# 🗑 ELIMINAR
-# =========================
-st.markdown("---")
-st.subheader("🗑 Eliminar registos")
-
-for _, row in df[df["Pessoa"] == modo].iterrows():
-
-    c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
-
-    c1.write(row["Pessoa"])
-    c2.write(row["Tipo"])
-    c3.write(row["Categoria"])
-    c4.write(row["Valor"])
-
-    if c5.button("❌", key=f"del_{row['sheet_row']}"):
-        sheet.delete_rows(row["sheet_row"])
-        st.cache_data.clear()
-        st.success("Eliminado")
-        st.rerun()
