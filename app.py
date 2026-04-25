@@ -60,7 +60,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CATEGORIAS (RESTAURO COMPLETO)
+# CATEGORIAS
 # =========================
 @st.cache_data(ttl=30)
 def load_categories():
@@ -114,7 +114,7 @@ modo = st.sidebar.selectbox(
 avatars = {"Ruben":"🤴","Gabi":"👸"}
 
 # =========================
-# CATEGORIAS UI (RESTAURO COMPLETO)
+# CATEGORIAS UI
 # =========================
 st.sidebar.markdown("## ⚙️ Categorias")
 
@@ -138,11 +138,11 @@ with st.sidebar.expander("📋 Ver categorias"):
     st.write(categories)
 
 # =========================
-# CASAL PRO 2 (MANTIDO)
+# CASAL
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
-    st.subheader("👨‍❤️‍👩 Casal - PRO 2 Inteligente")
+    st.subheader("👨‍❤️‍👩 Casal - PRO 2.1 Inteligente")
 
     def get_last_salary(df, pessoa):
         df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
@@ -174,10 +174,6 @@ if modo == "Casal 👨‍❤️‍👩":
         c2.metric("💸 Despesas", f"{total_despesas:.2f} €")
         c3.metric("📊 Saldo", f"{saldo:.2f} €")
 
-        # ALERTAS
-        if total_despesas > total_receitas:
-            st.error("⚠️ Gastos acima dos rendimentos!")
-
         if not despesas.empty:
             fig = px.bar(despesas, x="Categoria", y="Valor", title="Despesas por Categoria")
             st.plotly_chart(fig, use_container_width=True)
@@ -188,9 +184,6 @@ if modo == "Casal 👨‍❤️‍👩":
         st.markdown("### 💸 Despesas")
         st.dataframe(despesas, use_container_width=True)
 
-        # =========================
-        # 🗑 DELETE REGISTOS (RESTAURO)
-        # =========================
         st.markdown("#### 🗑 Eliminar registos")
 
         for _, row in df_p.iterrows():
@@ -216,7 +209,7 @@ if modo == "Casal 👨‍❤️‍👩":
     st.stop()
 
 # =========================
-# METAS (RESTAURO COMPLETO)
+# METAS (CORRIGIDO — SEM EMPTY DATAFRAME)
 # =========================
 if modo == "Metas 🎯":
 
@@ -236,11 +229,12 @@ if modo == "Metas 🎯":
             goal_sheet.append_row([nome,obj,0])
             refresh()
 
-    st.dataframe(goals)
+    # 🔥 FIX AQUI (SEM EMPTY DATAFRAME)
+    if goals.empty:
+        st.info("Ainda não existem metas criadas.")
+    else:
+        st.dataframe(goals)
 
-    # =========================
-    # 🗑 ELIMINAR METAS (RESTAURO)
-    # =========================
     st.markdown("#### 🗑 Eliminar metas")
 
     for i, row in goals.iterrows():
@@ -255,7 +249,7 @@ if modo == "Metas 🎯":
     st.stop()
 
 # =========================
-# INDIVIDUAL (MANTIDO)
+# INDIVIDUAL
 # =========================
 pessoa = modo.split()[0]
 
