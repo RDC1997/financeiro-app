@@ -74,6 +74,11 @@ def guardar(d):
     ])
 
 # =========================
+# LOAD
+# =========================
+df = load_data()
+
+# =========================
 # NOVO REGISTO
 # =========================
 st.subheader("➕ Novo registo")
@@ -90,15 +95,7 @@ with col1:
     if tipo == "Despesa":
         categoria = st.selectbox(
             "Categoria",
-            [
-                "Renda",
-                "Água",
-                "Luz",
-                "Vodafone",
-                "Alimentação",
-                "Gasolina",
-                "Outros"
-            ]
+            ["Renda","Água","Luz","Vodafone","Alimentação","Gasolina","Outros"]
         )
 
         if categoria == "Outros":
@@ -108,21 +105,10 @@ with col2:
     valor = st.number_input("Valor (€)", min_value=0.0, step=10.0)
     data = st.date_input("Data", datetime.today())
 
-# =========================
-# ADICIONAR
-# =========================
 if st.button("Adicionar"):
 
     if valor <= 0:
-        st.error("O valor precisa de ser maior que zero.")
-        st.stop()
-
-    if tipo == "Despesa" and categoria == "":
-        st.error("Seleciona uma categoria.")
-        st.stop()
-
-    if categoria == "Outros" and descricao.strip() == "":
-        st.error("Preenche a descrição.")
+        st.error("Valor inválido")
         st.stop()
 
     novo = {
@@ -137,57 +123,93 @@ if st.button("Adicionar"):
     }
 
     guardar(novo)
-    st.success("Guardado com sucesso ☁️")
+    st.success("Guardado")
     st.rerun()
 
 # =========================
-# LOAD DATA
+# DELETE + EDIT
 # =========================
-df = load_data()
-
-# =========================
-# DELETE REGISTO
-# =========================
-st.subheader("🗑️ Eliminar registo")
+st.subheader("🗑️ Eliminar / ✏️ Editar registos")
 
 if not df.empty:
 
     raw = sheet.get_all_values()
-    headers = raw[0]
     rows = raw[1:]
 
-    lista = []
+    data_list = []
 
     for i, r in enumerate(rows, start=2):
-        if len(r) >= 5:
-            lista.append({
+        if len(r) >= 6:
+            data_list.append({
                 "linha": i,
                 "Pessoa": r[0],
                 "Tipo": r[1],
                 "Categoria": r[2],
                 "Descrição": r[3],
-                "Valor": r[4],
-                "Data": r[5] if len(r) > 5 else ""
+                "Valor": float(r[4]) if r[4] else 0,
+                "Data": r[5]
             })
 
-    df_delete = pd.DataFrame(lista)
+    df_m = pd.DataFrame(data_list)
 
     escolha = st.selectbox(
-        "Seleciona o registo",
-        df_delete.index,
+        "Seleciona registo",
+        df_m.index,
         format_func=lambda x:
-            f"{df_delete.loc[x,'Pessoa']} | {df_delete.loc[x,'Tipo']} | €{df_delete.loc[x,'Valor']}"
+            f"{df_m.loc[x,'Pessoa']} | {df_m.loc[x,'Tipo']} | €{df_m.loc[x,'Valor']}"
     )
 
-    linha_real = int(df_delete.loc[escolha, "linha"])
+    linha = int(df_m.loc[escolha, "linha"])
 
-    if st.button("🗑️ Apagar registo"):
-        sheet.delete_rows(linha_real)
-        st.success("Registo eliminado com sucesso")
+    # =========================
+    # DELETE COM CONFIRMAÇÃO
+    # =========================
+    confirm = st.checkbox("Confirmo que quero apagar este registo")
+
+    if confirm and st.button("🗑️ Apagar"):
+        sheet.delete_rows(linha)
+        st.success("Eliminado")
+        st.rerun()
+
+    # =========================
+    # EDITAR REGISTO
+    # =========================
+    st.markdown("---")
+    st.subheader("✏️ Editar registo")
+
+    row = df_m.loc[escolha]
+
+    pessoa_e = st.selectbox("Pessoa", ["Ruben","Gabi"], index=["Ruben","Gabi"].index(row["Pessoa"]))
+    tipo_e = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"], index=["Salário","Subsídio Alimentação","Despesa"].index(row["Tipo"]))
+
+    categoria_e = row["Categoria"]
+    descricao_e = row["Descrição"]
+
+    if tipo_e == "Despesa":
+        categoria_e = st.selectbox("Categoria",
+            ["Renda","Água","Luz","Vodafone","Alimentação","Gasolina","Outros"])
+
+        if categoria_e == "Outros":
+            descricao_e = st.text_input("Descrição", value=row["Descrição"])
+
+    valor_e = st.number_input("Valor", value=float(row["Valor"]))
+
+    if st.button("💾 Guardar alterações"):
+        sheet.update(f"A{linha}:H{linha}", [[
+            pessoa_e,
+            tipo_e,
+            categoria_e,
+            descricao_e,
+            valor_e,
+            row["Data"],
+            row.get("Mês",0),
+            row.get("Ano",0)
+        ]])
+        st.success("Atualizado")
         st.rerun()
 
 else:
-    st.info("Sem dados ainda para eliminar")
+    st.info("Sem dados")
 
 # =========================
 # FILTRO
@@ -196,106 +218,61 @@ if not df.empty:
 
     st.subheader("📅 Filtro")
 
-    col_f1, col_f2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
     meses = sorted(df["Mês"].unique())
     anos = sorted(df["Ano"].unique())
 
-    with col_f1:
-        mes_filtro = st.selectbox("Mês", meses)
+    mes = st.selectbox("Mês", meses)
+    ano = st.selectbox("Ano", anos)
 
-    with col_f2:
-        ano_filtro = st.selectbox("Ano", anos)
-
-    df = df[(df["Mês"] == mes_filtro) & (df["Ano"] == ano_filtro)]
+    df = df[(df["Mês"] == mes) & (df["Ano"] == ano)]
 
 # =========================
 # DASHBOARD
 # =========================
 if not df.empty:
 
-    st.subheader("📊 Visão Geral")
-
-    receitas = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
+    receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]
     receitas = receitas["Valor"].sum()
 
     despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
 
     saldo = receitas - despesas
 
-    c1, c2, c3 = st.columns(3)
+    c1,c2,c3 = st.columns(3)
 
-    with c1:
-        st.metric("Receitas", f"€ {receitas:.2f}")
+    c1.metric("Receitas", f"€ {receitas:.2f}")
+    c2.metric("Despesas", f"€ {despesas:.2f}")
+    c3.metric("Saldo", f"€ {saldo:.2f}")
 
-    with c2:
-        st.metric("Despesas", f"€ {despesas:.2f}")
+    st.subheader("📊 Categorias")
+    cat = df[df["Tipo"]=="Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
 
-    with c3:
-        st.metric("Saldo", f"€ {saldo:.2f}")
-
-    if despesas > receitas:
-        st.warning("⚠️ As despesas ultrapassaram as receitas este mês.")
+    if not cat.empty:
+        st.plotly_chart(px.bar(cat,x="Categoria",y="Valor"),use_container_width=True)
 
     # =========================
-    # DESPESAS POR CATEGORIA
+    # META MULTIPLA
     # =========================
-    despesas_df = df[df["Tipo"] == "Despesa"]
+    st.subheader("🎯 Metas")
 
-    if not despesas_df.empty:
-        st.subheader("🧾 Despesas por Categoria")
+    if "metas" not in st.session_state:
+        st.session_state.metas = {
+            "Casa":10000,
+            "Carro":5000,
+            "Poupança":2000
+        }
 
-        categoria_total = despesas_df.groupby("Categoria")["Valor"].sum().reset_index()
-
-        fig = px.pie(categoria_total, names="Categoria", values="Valor")
-        st.plotly_chart(fig, use_container_width=True)
-
-        top = categoria_total.sort_values("Valor", ascending=False).iloc[0]
-        st.info(f"Maior gasto: {top['Categoria']} → € {top['Valor']:.2f}")
-
-    # =========================
-    # RUBEN VS GABI
-    # =========================
-    st.subheader("⚖️ Ruben vs Gabi")
-
-    fig2 = px.bar(df.groupby("Pessoa")["Valor"].sum().reset_index(), x="Pessoa", y="Valor", text="Valor")
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # =========================
-    # META FINANCEIRA (EDITÁVEL)
-    # =========================
-    st.subheader("🎯 Meta Financeira")
-
-    if "meta" not in st.session_state:
-        st.session_state.meta = 10000
-
-    st.session_state.meta = st.number_input(
-        "Define a tua meta (€)",
-        min_value=0.0,
-        step=500.0,
-        value=float(st.session_state.meta)
-    )
-
-    meta = st.session_state.meta
-    progresso = max(0, min(saldo / meta, 1.0)) if meta > 0 else 0
-
-    st.progress(progresso)
-    st.write(f"Objetivo: € {meta:.2f}")
-    st.write(f"Atual: € {saldo:.2f}")
+    for k in st.session_state.metas:
+        st.session_state.metas[k] = st.number_input(k, value=float(st.session_state.metas[k]))
+        prog = max(0,min(saldo/st.session_state.metas[k],1)) if st.session_state.metas[k]>0 else 0
+        st.progress(prog)
 
     # =========================
     # BACKUP
     # =========================
-    st.subheader("⬇️ Backup")
-
-    csv = df.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        "Exportar CSV",
-        data=csv,
-        file_name="backup_financas.csv",
-        mime="text/csv"
-    )
+    st.download_button("Backup CSV", df.to_csv(index=False).encode(), "backup.csv")
 
 else:
-    st.info("Sem dados ainda.")
+    st.info("Sem dados")
