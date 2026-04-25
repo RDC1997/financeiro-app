@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import datetime
 
 import gspread
@@ -68,7 +67,7 @@ def guardar(d):
 df = load_data()
 
 # =========================
-# FILTRO SIMPLES (MOBILE FRIENDLY)
+# FILTRO SIMPLES
 # =========================
 st.sidebar.header("🔍 Filtros")
 
@@ -122,76 +121,61 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# DASHBOARD LIMPO (VERSÃO 4)
+# DASHBOARD LIMPO (SEM GRÁFICOS)
 # =========================
 if not df_view.empty:
 
-    st.subheader("📊 Resumo")
+    st.subheader("📊 Resumo do mês")
 
     receitas = df_view[df_view["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
     despesas = df_view[df_view["Tipo"] == "Despesa"]["Valor"].sum()
     saldo = receitas - despesas
 
+    # =========================
+    # CARTÕES PRINCIPAIS
+    # =========================
     c1, c2, c3 = st.columns(3)
-    c1.metric("Receitas", f"€ {receitas:.2f}")
-    c2.metric("Despesas", f"€ {despesas:.2f}")
-    c3.metric("Saldo", f"€ {saldo:.2f}")
+    c1.metric("💰 Receitas", f"€ {receitas:.2f}")
+    c2.metric("💸 Despesas", f"€ {despesas:.2f}")
+    c3.metric("⚖️ Saldo", f"€ {saldo:.2f}")
+
+    st.markdown("---")
 
     # =========================
-    # ONDE O DINHEIRO VAI (MOBILE CLEAN)
+    # ALERTA SIMPLES
     # =========================
-    st.subheader("📉 Onde gastas mais")
+    if saldo < 0:
+        st.error("⚠️ Estão a gastar mais do que estão a ganhar")
+    elif saldo < 200:
+        st.warning("⚠️ Saldo baixo — atenção aos gastos")
+    else:
+        st.success("✔ Situação financeira estável")
 
-    cat = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
-
-    if not cat.empty:
-        fig = px.bar(
-            cat.sort_values("Valor", ascending=False),
-            x="Categoria",
-            y="Valor"
-        )
-
-        fig.update_layout(
-            height=300,
-            margin=dict(l=10, r=10, t=10, b=10),
-            xaxis_title="",
-            yaxis_title=""
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+    st.markdown("---")
 
     # =========================
-    # EVOLUÇÃO FINANCEIRA (SIMPLIFICADA MOBILE)
+    # ONDE VAI O DINHEIRO (LISTA CLARA)
     # =========================
-    st.subheader("📈 Evolução do saldo")
+    st.subheader("📉 Principais gastos")
 
-    temp = df_view.copy()
+    gastos = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
+    gastos = gastos.sort_values("Valor", ascending=False)
 
-    temp["Movimento"] = temp.apply(
-        lambda x: x["Valor"] if x["Tipo"] != "Despesa" else -x["Valor"],
-        axis=1
-    )
+    if not gastos.empty:
+        for _, row in gastos.iterrows():
+            st.write(f"💳 **{row['Categoria']}** → € {row['Valor']:.2f}")
 
-    temp = temp.sort_values("Data")
-    temp["Saldo"] = temp["Movimento"].cumsum()
+    st.markdown("---")
 
-    fig2 = px.line(
-        temp,
-        x="Data",
-        y="Saldo"
-    )
+    # =========================
+    # POR PESSOA
+    # =========================
+    st.subheader("👤 Gastos por pessoa")
 
-    fig2.update_layout(
-        height=300,
-        margin=dict(l=10, r=10, t=10, b=10),
-        xaxis_title="",
-        yaxis_title=""
-    )
+    por_pessoa = df_view.groupby("Pessoa")["Valor"].sum().reset_index()
 
-    fig2.update_xaxes(showgrid=False)
-    fig2.update_yaxes(showgrid=False)
-
-    st.plotly_chart(fig2, use_container_width=True)
+    for _, row in por_pessoa.iterrows():
+        st.write(f"👤 **{row['Pessoa']}** → € {row['Valor']:.2f}")
 
 else:
     st.info("Sem dados ainda")
