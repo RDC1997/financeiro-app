@@ -66,7 +66,7 @@ def load_data():
 df = load_data()
 
 # =========================
-# 🔥 CICLO POR SALÁRIO (NOVO)
+# 🔥 CICLO POR SALÁRIO
 # =========================
 def get_last_salary(df, pessoa):
     df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
@@ -121,8 +121,17 @@ if modo == "Casal":
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        # 🔥 AQUI JÁ USA CICLO
+        # 🔥 CICLO
         df_p = filtrar_ciclo(df, pessoa)
+
+        # =========================
+        # 🧪 DEBUG DO CICLO
+        # =========================
+        with st.expander(f"🔍 Debug do ciclo - {pessoa}"):
+
+            st.write("Último salário:", get_last_salary(df, pessoa))
+            st.write("Registos no ciclo:", len(df_p))
+            st.dataframe(df_p[["Tipo","Valor","Data"]])
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
