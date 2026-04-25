@@ -36,6 +36,11 @@ try:
         "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
     ).worksheet("Categorias")
 
+    # ✅ NOVO: METAS
+    goals_sheet = client.open_by_key(
+        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+    ).worksheet("Metas")
+
 except Exception as e:
     st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
     st.stop()
@@ -66,6 +71,24 @@ def delete_category(cat):
             break
 
 categories = load_categories()
+
+# =========================
+# METAS (NOVO)
+# =========================
+@st.cache_data(ttl=10)
+def load_goals():
+    data = goals_sheet.get_all_values()
+
+    if len(data) < 2:
+        return pd.DataFrame(columns=["Nome","Objetivo","Atual"])
+
+    df = pd.DataFrame(data[1:], columns=data[0])
+    df["Objetivo"] = pd.to_numeric(df["Objetivo"], errors="coerce").fillna(0)
+    df["Atual"] = pd.to_numeric(df["Atual"], errors="coerce").fillna(0)
+
+    return df
+
+goals = load_goals()
 
 # =========================
 # DATA
@@ -119,7 +142,7 @@ def delete_row_safe(row):
         return False
 
 # =========================
-# SIDEBAR - CATEGORIAS
+# SIDEBAR
 # =========================
 st.sidebar.markdown("## ⚙️ Categorias")
 
@@ -130,7 +153,6 @@ with st.sidebar.expander("➕ Adicionar categoria"):
         if nova_cat.strip() != "":
             add_category(nova_cat.strip())
             st.cache_data.clear()
-            st.success("Categoria adicionada")
             st.rerun()
 
 with st.sidebar.expander("❌ Remover categoria"):
@@ -140,18 +162,12 @@ with st.sidebar.expander("❌ Remover categoria"):
         if st.button("Remover"):
             delete_category(cat_del)
             st.cache_data.clear()
-            st.success("Categoria removida")
             st.rerun()
-    else:
-        st.info("Sem categorias disponíveis")
-
-with st.sidebar.expander("📋 Categorias atuais"):
-    st.write(categories)
 
 # =========================
 # MODO
 # =========================
-modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
+modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi", "🎯 Metas"])
 
 avatars = {
     "Ruben": "🤴",
@@ -159,7 +175,75 @@ avatars = {
 }
 
 # =========================
-# 🟢 CASAL (VERSÃO RESTAURADA COM CICLOS)
+# 🎯 METAS (CASAL)
+# =========================
+if modo == "🎯 Metas":
+
+    st.subheader("🎯 Metas Financeiras do Casal")
+
+    st.markdown("### ➕ Criar meta")
+
+    nome = st.text_input("Nome da meta")
+    objetivo = st.number_input("Objetivo (€)", min_value=0.0)
+
+    if st.button("Adicionar meta"):
+        goals_sheet.append_row([nome, objetivo, 0])
+        st.cache_data.clear()
+        st.rerun()
+
+    st.markdown("---")
+
+    st.subheader("📊 Progresso das metas")
+
+    for i, row in goals.iterrows():
+
+        nome = row["Nome"]
+        objetivo = float(row["Objetivo"])
+        atual = float(row["Atual"])
+
+        percent = (atual / objetivo * 100) if objetivo > 0 else 0
+        percent = min(percent, 100)
+
+        if percent <= 25:
+            cor = "🔴"
+        elif percent <= 50:
+            cor = "🟠"
+        elif percent <= 75:
+            cor = "🟡"
+        else:
+            cor = "🟢"
+
+        st.markdown(f"### 🎯 {nome}")
+        st.write(f"{cor} {percent:.1f}%")
+
+        st.progress(percent / 100)
+
+        col1, col2, col3 = st.columns(3)
+
+        novo_nome = col1.text_input("Nome", nome, key=f"n{i}")
+        novo_obj = col2.number_input("Objetivo", value=objetivo, key=f"o{i}")
+        novo_atual = col3.number_input("Atual", value=atual, key=f"a{i}")
+
+        if st.button("Atualizar", key=f"u{i}"):
+
+            goals_sheet.update_cell(i+2, 1, novo_nome)
+            goals_sheet.update_cell(i+2, 2, novo_obj)
+            goals_sheet.update_cell(i+2, 3, novo_atual)
+
+            st.cache_data.clear()
+            st.rerun()
+
+        if st.button("🗑 Remover", key=f"d{i}"):
+
+            goals_sheet.delete_rows(i+2)
+
+            st.cache_data.clear()
+            st.rerun()
+
+    st.stop()
+
+# =========================
+# CASAL
 # =========================
 if modo == "Casal":
 
@@ -177,10 +261,7 @@ if modo == "Casal":
         if not last_salary:
             return df[df["Pessoa"] == pessoa]
 
-        return df[
-            (df["Pessoa"] == pessoa) &
-            (df["Data"] >= last_salary)
-        ]
+        return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
 
     for pessoa in ["Ruben", "Gabi"]:
 
@@ -188,33 +269,18 @@ if modo == "Casal":
 
         df_p = filtrar_ciclo(df, pessoa)
 
-        with st.expander(f"🔍 Debug do ciclo - {pessoa}"):
-            st.write("Último salário:", get_last_salary(df, pessoa))
-            st.write("Registos no ciclo:", len(df_p))
-            st.dataframe(df_p[["Tipo","Categoria","Valor","Data"]])
-
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-        st.markdown("### 💰 Receitas")
-        if not receitas.empty:
-            st.dataframe(receitas[["Tipo","Valor","Data"]], use_container_width=True)
-        else:
-            st.info("Sem receitas neste ciclo")
+        c1, c2 = st.columns(2)
 
-        st.markdown("### 💸 Despesas")
-        if not despesas.empty:
-            st.dataframe(despesas[["Categoria","Valor","Data"]], use_container_width=True)
-
-            total = despesas["Valor"].sum()
-            st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
-        else:
-            st.info("Sem despesas neste ciclo")
+        c1.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
+        c2.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
 
     st.stop()
 
 # =========================
-# 🔵 INDIVIDUAL
+# INDIVIDUAL
 # =========================
 st.subheader(f"{avatars[modo]} {modo}")
 
@@ -249,11 +315,10 @@ if st.button("Adicionar"):
     ])
 
     st.cache_data.clear()
-    st.success("Adicionado com sucesso")
     st.rerun()
 
 # =========================
-# 🗑 ELIMINAR
+# ELIMINAR
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
