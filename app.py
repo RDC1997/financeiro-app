@@ -39,7 +39,7 @@ except Exception as e:
 # =========================
 # CATEGORIAS
 # =========================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=120)
 def load_categories():
     data = cat_sheet.get_all_values()
     if len(data) < 2:
@@ -49,9 +49,9 @@ def load_categories():
 categories = load_categories()
 
 # =========================
-# DATA (REDUZ CHAMADAS)
+# DATA (OTIMIZADO)
 # =========================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=120)
 def load_data():
     raw = sheet.get_all_values()
 
@@ -79,9 +79,9 @@ def load_data():
 df = load_data()
 
 # =========================
-# METAS (ROBUSTO + SEM KEYERROR + SEM QUOTA BUGS)
+# METAS (ROBUSTO + SEM BUG DE DELETE)
 # =========================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=120)
 def load_goals():
     raw = goal_sheet.get_all_values()
 
@@ -90,7 +90,6 @@ def load_goals():
 
     df = pd.DataFrame(raw[1:], columns=raw[0])
 
-    # garante colunas
     for c in ["Meta","Objetivo","Atual"]:
         if c not in df.columns:
             df[c] = 0
@@ -98,13 +97,13 @@ def load_goals():
     df["Objetivo"] = pd.to_numeric(df["Objetivo"], errors="coerce").fillna(0)
     df["Atual"] = pd.to_numeric(df["Atual"], errors="coerce").fillna(0)
 
-    # 🔥 CRÍTICO: guardar linha real do sheets
+    # 🔥 FIX CRÍTICO: linha real do Google Sheets
     df["row"] = df.index + 2
 
     return df
 
 # =========================
-# DELETE SAFE
+# SAFE DELETE
 # =========================
 def delete_row_safe(row):
     try:
@@ -129,7 +128,7 @@ avatars = {
 }
 
 # =========================
-# METAS FIX DEFINITIVO (SEM ERROS + SEM QUOTA LOOP)
+# METAS (TOTALMENTE ESTÁVEL)
 # =========================
 if modo == "Metas 🎯":
 
@@ -141,7 +140,7 @@ if modo == "Metas 🎯":
         nome = st.text_input("Nome da meta")
         objetivo = st.number_input("Objetivo (€)", min_value=0.0)
 
-        if st.button("Criar meta"):
+        if st.button("Criar"):
             if nome.strip():
                 goal_sheet.append_row([nome, objetivo, 0])
                 st.cache_data.clear()
@@ -186,7 +185,7 @@ if modo == "Metas 🎯":
     st.stop()
 
 # =========================
-# CASAL COM TABELAS COMPLETAS (COMO PEDISTE)
+# CASAL (TABELAS COMPLETAS RESTAURADAS)
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
@@ -243,7 +242,7 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# ELIMINAR
+# ELIMINAR REGISTOS
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
