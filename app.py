@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import time
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -28,30 +29,87 @@ try:
 
     client = gspread.authorize(creds)
 
-    sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
-    cat_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Categorias")
-    goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Metas")
+    SHEET_ID = "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+
+    sheet = client.open_by_key(SHEET_ID).sheet1
+    cat_sheet = client.open_by_key(SHEET_ID).worksheet("Categorias")
+
+    try:
+        goal_sheet = client.open_by_key(SHEET_ID).worksheet("Metas")
+    except:
+        goal_sheet = client.open_by_key(SHEET_ID).add_worksheet("Metas", 100, 3)
+        goal_sheet.append_row(["Meta", "Objetivo", "Atual"])
 
 except Exception as e:
     st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
     st.stop()
 
+
 # =========================
-# CATEGORIAS
+# CACHE SAFE HELPERS (evita erro 429)
 # =========================
-@st.cache_data(ttl=120)
+def safe_sleep():
+    time.sleep(0.4)
+
+
+# =========================
+# CATEGORIAS (COMPLETO RESTAURADO)
+# =========================
+@st.cache_data(ttl=30)
 def load_categories():
     data = cat_sheet.get_all_values()
     if len(data) < 2:
         return []
     return [row[0] for row in data[1:] if row[0].strip() != ""]
 
+def add_category(cat):
+    safe_sleep()
+    cat_sheet.append_row([cat])
+
+def delete_category(cat):
+    safe_sleep()
+    data = cat_sheet.get_all_values()
+    for i, row in enumerate(data):
+        if i == 0:
+            continue
+        if row[0] == cat:
+            cat_sheet.delete_rows(i + 1)
+            break
+
 categories = load_categories()
 
+
 # =========================
-# DATA (OTIMIZADO)
+# SIDEBAR CATEGORIAS (RESTAURADO)
 # =========================
-@st.cache_data(ttl=120)
+st.sidebar.markdown("## ⚙️ Categorias")
+
+with st.sidebar.expander("➕ Adicionar categoria"):
+    new_cat = st.text_input("Nova categoria")
+
+    if st.button("Adicionar categoria"):
+        if new_cat.strip():
+            add_category(new_cat.strip())
+            st.cache_data.clear()
+            st.rerun()
+
+with st.sidebar.expander("❌ Remover categoria"):
+    if categories:
+        cat_del = st.selectbox("Escolhe categoria", categories)
+
+        if st.button("Remover categoria"):
+            delete_category(cat_del)
+            st.cache_data.clear()
+            st.rerun()
+
+with st.sidebar.expander("📋 Ver categorias"):
+    st.write(categories)
+
+
+# =========================
+# DATA (OTIMIZADO PARA NÃO DAR 429)
+# =========================
+@st.cache_data(ttl=30)
 def load_data():
     raw = sheet.get_all_values()
 
@@ -76,31 +134,29 @@ def load_data():
     df["sheet_row"] = df.index + 2
     return df
 
-df = load_data()
 
 # =========================
-# METAS (ROBUSTO + SEM BUG DE DELETE)
+# METAS (FIX TOTAL + SEM KEYERROR + DELETE CORRETO)
 # =========================
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=30)
 def load_goals():
     raw = goal_sheet.get_all_values()
 
-    if not raw or len(raw) < 2:
-        return pd.DataFrame(columns=["row","Meta","Objetivo","Atual"])
+    if len(raw) < 2:
+        return pd.DataFrame(columns=["Meta","Objetivo","Atual"])
 
     df = pd.DataFrame(raw[1:], columns=raw[0])
 
     for c in ["Meta","Objetivo","Atual"]:
         if c not in df.columns:
-            df[c] = 0
+            df[c] = 0 if c != "Meta" else ""
 
     df["Objetivo"] = pd.to_numeric(df["Objetivo"], errors="coerce").fillna(0)
     df["Atual"] = pd.to_numeric(df["Atual"], errors="coerce").fillna(0)
 
-    # 🔥 FIX CRÍTICO: linha real do Google Sheets
     df["row"] = df.index + 2
-
     return df
+
 
 # =========================
 # SAFE DELETE
@@ -112,6 +168,7 @@ def delete_row_safe(row):
     except Exception as e:
         st.error(f"Erro ao eliminar: {e}")
         return False
+
 
 # =========================
 # MENU
@@ -127,8 +184,9 @@ avatars = {
     "Casal": "👨‍❤️‍👩"
 }
 
+
 # =========================
-# METAS (TOTALMENTE ESTÁVEL)
+# METAS 🎯 (100% ESTÁVEL + SEM QUOTA LOOP)
 # =========================
 if modo == "Metas 🎯":
 
@@ -140,8 +198,9 @@ if modo == "Metas 🎯":
         nome = st.text_input("Nome da meta")
         objetivo = st.number_input("Objetivo (€)", min_value=0.0)
 
-        if st.button("Criar"):
+        if st.button("Criar meta"):
             if nome.strip():
+                safe_sleep()
                 goal_sheet.append_row([nome, objetivo, 0])
                 st.cache_data.clear()
                 st.rerun()
@@ -173,20 +232,25 @@ if modo == "Metas 🎯":
         add = c1.number_input("Adicionar", min_value=0.0, key=f"add_{r}")
 
         if c1.button("Adicionar", key=f"btn_{r}"):
+            safe_sleep()
             goal_sheet.update_cell(r, 3, atual + add)
             st.cache_data.clear()
             st.rerun()
 
         if c2.button("Eliminar", key=f"del_{r}"):
+            safe_sleep()
             goal_sheet.delete_rows(r)
             st.cache_data.clear()
             st.rerun()
 
     st.stop()
 
+
 # =========================
-# CASAL (TABELAS COMPLETAS RESTAURADAS)
+# CASAL (TABELAS RESTAURADAS COMPLETAS)
 # =========================
+df = load_data()
+
 if modo == "Casal 👨‍❤️‍👩":
 
     st.subheader("📊 CASAL")
@@ -210,6 +274,7 @@ if modo == "Casal 👨‍❤️‍👩":
 
     st.stop()
 
+
 # =========================
 # INDIVIDUAL
 # =========================
@@ -230,6 +295,7 @@ valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 if st.button("Adicionar"):
+    safe_sleep()
     sheet.append_row([
         pessoa,
         tipo,
@@ -241,8 +307,9 @@ if st.button("Adicionar"):
     st.cache_data.clear()
     st.rerun()
 
+
 # =========================
-# ELIMINAR REGISTOS
+# ELIMINAR
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
