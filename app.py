@@ -31,11 +31,10 @@ try:
 
 except Exception as e:
     st.error("❌ Erro ao ligar ao Google Sheets")
-    st.error(str(e))
     st.stop()
 
 # =========================
-# DATA
+# DATA (COM LINHA REAL SHEET)
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -44,12 +43,18 @@ def load_data():
     if not raw or len(raw) < 2:
         return pd.DataFrame()
 
-    df = pd.DataFrame(raw[1:], columns=raw[0])
+    headers = raw[0]
+    data = raw[1:]
+
+    df = pd.DataFrame(data, columns=headers)
     df.columns = df.columns.str.strip()
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
+    # 🔥 GUARDA LINHA REAL DA SHEET
+    df["sheet_row"] = df.index + 2
 
     return df
 
@@ -63,8 +68,8 @@ def guardar(d):
         str(d["Data"])
     ])
 
-def apagar_linha(index):
-    sheet.delete_rows(index + 2)  # +2 por causa do header + index 0
+def eliminar_linha(sheet_row):
+    sheet.delete_rows(sheet_row)
 
 df = load_data()
 
@@ -107,7 +112,7 @@ if not df.empty:
         df = df[df["Mes"] == mes]
 
 # =========================
-# 🟢 CASAL (SÓ VISUALIZAÇÃO)
+# 🟢 CASAL
 # =========================
 if modo == "Casal":
 
@@ -116,14 +121,12 @@ if modo == "Casal":
     receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]
     despesas = df[df["Tipo"] == "Despesa"]
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
-    col2.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
-    col3.metric("⚖️ Saldo", f"€ {(receitas['Valor'].sum()-despesas['Valor'].sum()):.2f}")
+    st.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
+    st.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
 
     st.markdown("---")
 
-    st.markdown("## 💸 Despesas (detalhe)")
+    st.markdown("## 💸 Despesas")
 
     despesas = despesas.copy()
 
@@ -139,7 +142,7 @@ if modo == "Casal":
     st.stop()
 
 # =========================
-# 🔵 GESTÃO (R / G)
+# 🔵 GESTÃO
 # =========================
 st.subheader("➕ Novo registo")
 
@@ -174,26 +177,23 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# 🗑 ELIMINAR REGISTOS
+# 🗑 ELIMINAR (CORRIGIDO)
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
 
-if not df.empty:
-    for i, row in df.iterrows():
+for _, row in df.iterrows():
 
-        col1, col2, col3, col4, col5 = st.columns([2,3,2,2,1])
+    col1, col2, col3, col4, col5 = st.columns([2,3,2,2,1])
 
-        col1.write(row["Pessoa"])
-        col2.write(row["Tipo"])
-        col3.write(row["Categoria"])
-        col4.write(row["Valor"])
+    col1.write(row["Pessoa"])
+    col2.write(row["Tipo"])
+    col3.write(row["Categoria"])
+    col4.write(row["Valor"])
 
-        if col5.button("❌", key=f"del_{i}"):
+    if col5.button("❌", key=f"del_{row['sheet_row']}"):
 
-            st.warning("Tens a certeza?")
-            if st.button("Sim, eliminar", key=f"confirm_{i}"):
-                apagar_linha(i)
-                st.cache_data.clear()
-                st.success("Eliminado")
-                st.rerun()
+        eliminar_linha(row["sheet_row"])
+        st.cache_data.clear()
+        st.success("Eliminado com sucesso")
+        st.rerun()
