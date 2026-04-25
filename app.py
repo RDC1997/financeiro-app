@@ -36,7 +36,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CACHE (ANTI 429)
+# CACHE
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -66,7 +66,7 @@ def guardar(d):
 df = load_data()
 
 # =========================
-# ÍCONES CATEGORIAS
+# ÍCONES
 # =========================
 icons = {
     "Renda": "🏠",
@@ -78,9 +78,7 @@ icons = {
     "Outros": "📦"
 }
 
-# =========================
-# 👑 AVATARES REI & RAINHA
-# =========================
+# 👑 REI & RAINHA
 avatars = {
     "Ruben": "🤴",
     "Gabi": "👸"
@@ -100,7 +98,7 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# 🟢 CASAL (SÓ VISUALIZAÇÃO)
+# 🟢 CASAL (VISUALIZAÇÃO)
 # =========================
 if modo == "Casal":
 
@@ -122,6 +120,10 @@ if modo == "Casal":
 
         if not receitas.empty:
             tabela_r = receitas[["Tipo", "Valor"]].groupby("Tipo").sum().reset_index()
+
+            # 🔧 FIX ALINHAMENTO
+            tabela_r["Valor"] = tabela_r["Valor"].apply(lambda x: f"{x:.0f}")
+
             st.table(tabela_r)
         else:
             st.info("Sem receitas")
@@ -136,6 +138,10 @@ if modo == "Casal":
             despesas["Categoria"] = despesas["Categoria"].map(icons) + " " + despesas["Categoria"]
 
             tabela_d = despesas[["Categoria", "Valor"]].groupby("Categoria").sum().reset_index()
+
+            # 🔧 FIX ALINHAMENTO
+            tabela_d["Valor"] = tabela_d["Valor"].apply(lambda x: f"{x:.0f}")
+
             st.table(tabela_d)
 
         else:
@@ -146,7 +152,7 @@ if modo == "Casal":
     st.stop()
 
 # =========================
-# 🔵 GESTÃO (RUBEN / GABI)
+# 🔵 GESTÃO (R / G)
 # =========================
 st.subheader("➕ Novo registo")
 
