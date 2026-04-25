@@ -237,7 +237,9 @@ if not df.empty:
     if despesas > receitas:
         st.warning("⚠️ As despesas ultrapassaram as receitas este mês.")
 
-    # Categoria
+    # =========================
+    # DESPESAS POR CATEGORIA
+    # =========================
     despesas_df = df[df["Tipo"] == "Despesa"]
 
     if not despesas_df.empty:
@@ -251,23 +253,39 @@ if not df.empty:
         top = categoria_total.sort_values("Valor", ascending=False).iloc[0]
         st.info(f"Maior gasto: {top['Categoria']} → € {top['Valor']:.2f}")
 
-    # Ruben vs Gabi
+    # =========================
+    # RUBEN VS GABI
+    # =========================
     st.subheader("⚖️ Ruben vs Gabi")
 
     fig2 = px.bar(df.groupby("Pessoa")["Valor"].sum().reset_index(), x="Pessoa", y="Valor", text="Valor")
     st.plotly_chart(fig2, use_container_width=True)
 
-    # Meta
+    # =========================
+    # META FINANCEIRA (EDITÁVEL)
+    # =========================
     st.subheader("🎯 Meta Financeira")
 
-    meta = 10000
-    progresso = max(0, min(saldo / meta, 1.0))
+    if "meta" not in st.session_state:
+        st.session_state.meta = 10000
+
+    st.session_state.meta = st.number_input(
+        "Define a tua meta (€)",
+        min_value=0.0,
+        step=500.0,
+        value=float(st.session_state.meta)
+    )
+
+    meta = st.session_state.meta
+    progresso = max(0, min(saldo / meta, 1.0)) if meta > 0 else 0
 
     st.progress(progresso)
     st.write(f"Objetivo: € {meta:.2f}")
     st.write(f"Atual: € {saldo:.2f}")
 
-    # Backup
+    # =========================
+    # BACKUP
+    # =========================
     st.subheader("⬇️ Backup")
 
     csv = df.to_csv(index=False).encode("utf-8")
