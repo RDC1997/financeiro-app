@@ -12,6 +12,54 @@ st.set_page_config(page_title="Rubi&Gabi Finance", layout="wide")
 st.title("💰 Controlo Financeiro")
 
 # =========================
+# 🎨 CSS CUSTOM
+# =========================
+st.markdown("""
+<style>
+
+/* layout geral */
+.block-container {
+    padding-top: 2rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
+}
+
+/* títulos */
+h1, h2, h3 {
+    font-family: Arial;
+    font-weight: 600;
+}
+
+/* tabelas */
+table {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* header tabela */
+th {
+    text-align: left !important;
+    background-color: #f5f5f5;
+    font-weight: 600;
+}
+
+/* alinhamento colunas */
+td:nth-child(1) {
+    text-align: left;
+}
+
+td:nth-child(2) {
+    text-align: center;
+}
+
+td:nth-child(3) {
+    text-align: right;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
 # GOOGLE SHEETS
 # =========================
 scope = [
@@ -65,15 +113,31 @@ def load_data():
 
 df = load_data()
 
+# =========================
+# ICONS
+# =========================
+icons = {
+    "Renda": "🏠",
+    "Vodafone": "📱",
+    "Gasolina": "🚗",
+    "Alimentação": "🛒",
+    "Luz": "💡",
+    "Água": "🚿",
+    "Outros": "📦"
+}
+
 avatars = {
     "Ruben": "🤴",
     "Gabi": "👸"
 }
 
+# =========================
+# MODO
+# =========================
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 🟢 CASAL (FUNCIONAL)
+# 🟢 CASAL
 # =========================
 if modo == "Casal":
 
@@ -83,7 +147,7 @@ if modo == "Casal":
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        df_p = df[df["Pessoa"] == pessoa]
+        df_p = df[df.get("Pessoa", "") == pessoa]
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
@@ -100,17 +164,30 @@ if modo == "Casal":
         st.markdown("### 💸 Despesas")
 
         if not despesas.empty:
+
+            despesas = despesas.copy()
+
+            despesas["Categoria"] = despesas.apply(
+                lambda r: (
+                    f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
+                    if r["Categoria"] == "Outros" and str(r["Descrição"]).strip() != ""
+                    else f"{icons.get(r['Categoria'],'')} {r['Categoria']}"
+                ),
+                axis=1
+            )
+
             st.dataframe(despesas[["Categoria","Valor","Data"]], use_container_width=True)
 
             total = despesas["Valor"].sum()
             st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
+
         else:
             st.info("Sem despesas")
 
     st.stop()
 
 # =========================
-# 🔵 RUBEN / GABI (GESTÃO TOTAL RESTAURADA)
+# 🔵 RUBEN / GABI
 # =========================
 st.subheader(f"{avatars[modo]} {modo}")
 
@@ -154,16 +231,16 @@ if st.button("Adicionar"):
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
 
-df_user = df[df["Pessoa"] == modo]
+df_user = df[df.get("Pessoa", "") == modo]
 
 for _, row in df_user.iterrows():
 
     c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
-    c1.write(row["Pessoa"])
-    c2.write(row["Tipo"])
-    c3.write(row["Categoria"])
-    c4.write(row["Valor"])
+    c1.write(row.get("Pessoa",""))
+    c2.write(row.get("Tipo",""))
+    c3.write(row.get("Categoria",""))
+    c4.write(row.get("Valor",""))
 
     if c5.button("❌", key=f"del_{row['sheet_row']}"):
         sheet.delete_rows(row["sheet_row"])
