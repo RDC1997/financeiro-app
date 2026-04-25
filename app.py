@@ -32,8 +32,21 @@ sheet = client.open_by_url(
 ).sheet1
 
 # =========================
-# LOAD DATA (CORRIGIDO)
+# LOAD DATA (ROBUSTO A 100%)
 # =========================
+def clean_person(x):
+    if pd.isna(x):
+        return ""
+    return str(x).strip().lower()
+
+def normalize_person(x):
+    x = clean_person(x)
+    if x == "ruben":
+        return "Ruben"
+    if x == "gabi":
+        return "Gabi"
+    return x.capitalize()
+
 def load_data():
     raw = sheet.get_all_values()
 
@@ -43,8 +56,8 @@ def load_data():
     df = pd.DataFrame(raw[1:], columns=raw[0])
     df.columns = df.columns.str.strip()
 
-    # 🔥 LIMPEZA CRÍTICA (CORREÇÃO DO BUG)
-    df["Pessoa"] = df["Pessoa"].astype(str).str.strip().str.capitalize()
+    # 🔥 CORREÇÃO DEFINITIVA
+    df["Pessoa"] = df["Pessoa"].apply(normalize_person)
 
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["Mês"] = pd.to_numeric(df["Mês"], errors="coerce").fillna(0).astype(int)
@@ -53,7 +66,7 @@ def load_data():
     return df
 
 # =========================
-# SAVE
+# SAVE (NORMALIZAÇÃO FORÇADA)
 # =========================
 def guardar(d):
     sheet.append_row([
@@ -70,7 +83,7 @@ def guardar(d):
 df = load_data()
 
 # =========================
-# MODO VISUALIZAÇÃO (CORRIGIDO)
+# MODO VISUALIZAÇÃO
 # =========================
 st.sidebar.header("👁️ Modo")
 
@@ -154,29 +167,9 @@ if not df_view.empty:
     st.markdown("---")
 
     # =========================
-    # GASTOS POR CATEGORIA
+    # DEBUG (REMOVE DEPOIS SE QUISERES)
     # =========================
-    st.subheader("📉 Gastos principais")
-
-    gastos = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
-    gastos = gastos.sort_values("Valor", ascending=False)
-
-    if not gastos.empty:
-        for _, row in gastos.iterrows():
-            st.write(f"💳 **{row['Categoria']}** → € {row['Valor']:.2f}")
-
-    st.markdown("---")
-
-    # =========================
-    # POR PESSOA (CASAL)
-    # =========================
-    if modo == "Casal":
-        st.subheader("👤 Gastos por pessoa")
-
-        por_pessoa = df_view.groupby("Pessoa")["Valor"].sum().reset_index()
-
-        for _, row in por_pessoa.iterrows():
-            st.write(f"👤 **{row['Pessoa']}** → € {row['Valor']:.2f}")
+    # st.write(df[["Pessoa","Valor"]])
 
 else:
     st.info("Sem dados ainda")
