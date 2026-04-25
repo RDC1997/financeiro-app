@@ -28,40 +28,29 @@ try:
 
     client = gspread.authorize(creds)
 
-    sheet = client.open_by_key(
-        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-    ).sheet1
+    sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
+    cat_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Categorias")
 
-    cat_sheet = client.open_by_key(
-        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-    ).worksheet("Categorias")
-
-    # =========================
-    # METAS SHEET (NOVO)
-    # =========================
+    # METAS
     try:
-        goal_sheet = client.open_by_key(
-            "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-        ).worksheet("Metas")
+        goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Metas")
     except:
-        goal_sheet = client.open_by_key(
-            "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-        ).add_worksheet(title="Metas", rows=100, cols=3)
-        goal_sheet.append_row(["Meta", "Objetivo", "Atual"])
+        goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").add_worksheet("Metas", 100, 3)
+        goal_sheet.append_row(["Meta","Objetivo","Atual"])
 
 except Exception as e:
     st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
     st.stop()
 
 # =========================
-# CATEGORIAS (MANTIDO)
+# CATEGORIAS (INTACTO)
 # =========================
 @st.cache_data(ttl=10)
 def load_categories():
     data = cat_sheet.get_all_values()
     if len(data) < 2:
         return []
-    return [row[0] for row in data[1:] if row[0].strip() != ""]
+    return [row[0] for row in data[1:] if row[0].strip()]
 
 def add_category(cat):
     cat_sheet.append_row([cat])
@@ -72,13 +61,13 @@ def delete_category(cat):
         if i == 0:
             continue
         if row[0] == cat:
-            cat_sheet.delete_rows(i + 1)
+            cat_sheet.delete_rows(i+1)
             break
 
 categories = load_categories()
 
 # =========================
-# DATA (MANTIDO)
+# DATA (INTACTO)
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -109,17 +98,14 @@ def load_data():
 df = load_data()
 
 # =========================
-# METAS LOGIC (NOVO)
+# METAS
 # =========================
 def load_goals():
     data = goal_sheet.get_all_records()
-    return pd.DataFrame(data) if data else pd.DataFrame(columns=["Meta","Objetivo","Atual"])
+    return pd.DataFrame(data)
 
-def save_goal(meta, obj):
-    goal_sheet.append_row([meta, float(obj), 0])
-
-def update_goal_value(row, new_value):
-    goal_sheet.update_cell(row, 3, float(new_value))
+def update_goal(row, value):
+    goal_sheet.update_cell(row, 3, value)
 
 def delete_goal(row):
     goal_sheet.delete_rows(row)
@@ -140,74 +126,100 @@ def delete_row_safe(row):
 # =========================
 # SIDEBAR
 # =========================
-st.sidebar.markdown("## 📊 Navegação")
-
-page = st.sidebar.selectbox(
-    "Menu",
-    ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"]
-)
+modo = st.sidebar.selectbox("Modo", ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"])
 
 # =========================
-# METAS UI (NOVO COMPLETO)
+# METAS
 # =========================
-if page == "Metas 🎯":
+if modo == "Metas 🎯":
 
-    st.subheader("🎯 Objetivos Financeiros")
+    st.subheader("🎯 Metas Financeiras")
 
-    with st.expander("➕ Criar nova meta"):
-        nome = st.text_input("Nome da meta")
-        valor = st.number_input("Valor objetivo (€)", min_value=0.0)
+    with st.expander("➕ Criar meta"):
+        nome = st.text_input("Nome")
+        objetivo = st.number_input("Objetivo (€)", min_value=0.0)
 
-        if st.button("Criar meta"):
-            if nome.strip():
-                save_goal(nome, valor)
-                st.success("Meta criada")
-                st.rerun()
-
-    st.markdown("---")
+        if st.button("Criar"):
+            goal_sheet.append_row([nome, objetivo, 0])
+            st.rerun()
 
     for i, row in goals.iterrows():
 
         meta = row["Meta"]
-        objetivo = float(row["Objetivo"])
+        obj = float(row["Objetivo"])
         atual = float(row["Atual"])
 
-        progresso = 0
-        if objetivo > 0:
-            progresso = atual / objetivo
+        percent = (atual / obj * 100) if obj > 0 else 0
 
-        percent = min(progresso * 100, 100)
-
-        # COR BAR
         if percent < 25:
-            color = "🔴"
+            emoji = "🔴"
         elif percent < 50:
-            color = "🟠"
+            emoji = "🟠"
         elif percent < 75:
-            color = "🟡"
+            emoji = "🟡"
         else:
-            color = "🟢"
+            emoji = "🟢"
 
         st.write(f"### {meta}")
-
-        st.progress(min(progresso, 1.0))
-        st.write(f"{color} {percent:.1f}% — € {atual:.2f} / € {objetivo:.2f}")
+        st.progress(min(percent/100,1))
+        st.write(f"{emoji} {percent:.1f}% — € {atual} / € {obj}")
 
         col1, col2 = st.columns(2)
 
-        add = col1.number_input(f"Adicionar a {meta}", min_value=0.0, key=f"a{i}")
+        add = col1.number_input("Adicionar", min_value=0.0, key=f"a{i}")
 
-        if col1.button("Adicionar dinheiro", key=f"add{i}"):
-            update_goal_value(i+2, atual + add)
+        if col1.button("Adicionar dinheiro", key=f"b{i}"):
+            goal_sheet.update_cell(i+2, 3, atual + add)
             st.rerun()
 
-        if col2.button("Eliminar meta", key=f"delg{i}"):
+        if col2.button("Eliminar", key=f"c{i}"):
             delete_goal(i+2)
             st.rerun()
 
     st.stop()
 
 # =========================
-# RESTO DO TEU SISTEMA (NÃO ALTERADO)
+# CASAL / RUBEN / GABI (RESTAURADO)
 # =========================
-st.write("👉 Aqui continua o teu sistema normal (Casal / Ruben / Gabi)")
+avatars = {
+    "Ruben": "🤴",
+    "Gabi": "👸"
+}
+
+st.subheader(f"{avatars.get(modo.split()[0], '👨‍❤️‍👩')} {modo}")
+
+pessoa = modo.split()[0]
+
+tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
+
+categoria = ""
+descricao = ""
+
+if tipo == "Despesa":
+    categoria = st.selectbox("Categoria", categories if categories else ["Outros"])
+    descricao = st.text_input("Descrição")
+
+valor = st.number_input("Valor (€)", min_value=0.0)
+data = st.date_input("Data", datetime.today())
+
+if st.button("Adicionar"):
+    sheet.append_row([pessoa,tipo,categoria,descricao,float(valor),str(data)])
+    st.rerun()
+
+st.markdown("---")
+st.subheader("🗑 Eliminar registos")
+
+df_user = df[df["Pessoa"] == pessoa].sort_values("Data", ascending=False)
+
+for _, row in df_user.iterrows():
+
+    c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
+
+    c1.write(row["Pessoa"])
+    c2.write(row["Tipo"])
+    c3.write(row["Categoria"])
+    c4.write(f"€ {row['Valor']:.2f}")
+
+    if c5.button("❌", key=row["sheet_row"]):
+        delete_row_safe(row["sheet_row"])
+        st.rerun()
