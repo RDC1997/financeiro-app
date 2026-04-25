@@ -72,6 +72,7 @@ def load_data():
     ).dt.date
 
     df["sheet_row"] = df.index + 2
+    df["MesAno"] = pd.to_datetime(df["Data"]).dt.strftime("%m/%Y")
 
     return df
 
@@ -79,7 +80,7 @@ def load_data():
 df = load_data()
 
 # =========================
-# 🔥 CICLO POR SALÁRIO
+# CICLO POR SALÁRIO
 # =========================
 def get_last_salary(df, pessoa):
     df_p = df[
@@ -107,9 +108,8 @@ def filtrar_ciclo(df, pessoa):
         (df["Data"] >= last_salary)
     ]
 
-
 # =========================
-# 🛡 DELETE SEGURO
+# DELETE SEGURO
 # =========================
 def delete_row_safe(target_row):
     fresh_raw = sheet.get_all_values()
@@ -124,9 +124,8 @@ def delete_row_safe(target_row):
         st.error(f"Erro ao eliminar: {e}")
         return False
 
-
 # =========================
-# 📊 DASHBOARD
+# DASHBOARD
 # =========================
 def mostrar_dashboard(df_pessoa, pessoa):
     st.markdown(f"## 📈 Dashboard de {pessoa}")
@@ -159,25 +158,10 @@ def mostrar_dashboard(df_pessoa, pessoa):
 
     c1, c2, c3, c4 = st.columns(4)
 
-    c1.metric(
-        "💰 Receitas",
-        f"€ {total_receitas:.2f}"
-    )
-
-    c2.metric(
-        "💸 Despesas",
-        f"€ {total_despesas:.2f}"
-    )
-
-    c3.metric(
-        "🏦 Saldo Atual",
-        f"€ {saldo_atual:.2f}"
-    )
-
-    c4.metric(
-        "🔥 Maior Gasto",
-        maior_categoria
-    )
+    c1.metric("💰 Receitas", f"€ {total_receitas:.2f}")
+    c2.metric("💸 Despesas", f"€ {total_despesas:.2f}")
+    c3.metric("🏦 Saldo Atual", f"€ {saldo_atual:.2f}")
+    c4.metric("🔥 Maior Gasto", maior_categoria)
 
     if not despesas.empty:
         st.markdown("### 📊 Despesas por Categoria")
@@ -194,20 +178,83 @@ def mostrar_dashboard(df_pessoa, pessoa):
 
     st.markdown("---")
 
+# =========================
+# HISTÓRICO MENSAL
+# =========================
+def mostrar_historico_mensal(df, pessoa):
+    st.markdown("## 📅 Histórico Mensal")
+
+    df_pessoa = df[df["Pessoa"] == pessoa].copy()
+
+    if df_pessoa.empty:
+        st.info("Sem histórico disponível")
+        return
+
+    meses = sorted(
+        df_pessoa["MesAno"].dropna().unique(),
+        reverse=True
+    )
+
+    mes_escolhido = st.selectbox(
+        "Seleciona o mês",
+        meses
+    )
+
+    df_mes = df_pessoa[
+        df_pessoa["MesAno"] == mes_escolhido
+    ]
+
+    receitas = df_mes[
+        df_mes["Tipo"].isin(
+            ["Salário", "Subsídio Alimentação"]
+        )
+    ]
+
+    despesas = df_mes[
+        df_mes["Tipo"] == "Despesa"
+    ]
+
+    total_receitas = receitas["Valor"].sum()
+    total_despesas = despesas["Valor"].sum()
+    saldo = total_receitas - total_despesas
+
+    maior_categoria = "—"
+
+    if not despesas.empty:
+        top = (
+            despesas.groupby("Categoria")["Valor"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+
+        if not top.empty:
+            maior_categoria = top.index[0]
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("💰 Receitas", f"€ {total_receitas:.2f}")
+    c2.metric("💸 Despesas", f"€ {total_despesas:.2f}")
+    c3.metric("🏦 Saldo", f"€ {saldo:.2f}")
+    c4.metric("🔥 Maior Gasto", maior_categoria)
+
+    if not despesas.empty:
+        st.markdown("### 📊 Despesas do mês")
+
+        grafico = (
+            despesas.groupby("Categoria")["Valor"]
+            .sum()
+            .reset_index()
+        )
+
+        st.bar_chart(
+            grafico.set_index("Categoria")
+        )
+
+    st.markdown("---")
 
 # =========================
 # ICONS
 # =========================
-icons = {
-    "Renda": "🏠",
-    "Vodafone": "📱",
-    "Gasolina": "🚗",
-    "Alimentação": "🛒",
-    "Luz": "💡",
-    "Água": "🚿",
-    "Outros": "📦"
-}
-
 avatars = {
     "Ruben": "🤴",
     "Gabi": "👸"
@@ -222,11 +269,11 @@ modo = st.sidebar.selectbox(
 )
 
 # =========================
-# 🟢 CASAL
+# CASAL
 # =========================
 if modo == "Casal":
 
-    st.subheader("📊 Visão Geral (Ciclos por salário)")
+    st.subheader("📊 Visão Geral")
 
     for pessoa in ["Ruben", "Gabi"]:
 
@@ -234,76 +281,26 @@ if modo == "Casal":
 
         df_p = filtrar_ciclo(df, pessoa)
 
-        # NOVO DASHBOARD
         mostrar_dashboard(df_p, pessoa)
-
-        with st.expander(f"🔍 Debug do ciclo - {pessoa}"):
-
-            st.write(
-                "Último salário:",
-                get_last_salary(df, pessoa)
-            )
-
-            st.write(
-                "Registos no ciclo:",
-                len(df_p)
-            )
-
-            st.dataframe(
-                df_p[["Tipo", "Valor", "Data"]]
-            )
-
-        receitas = df_p[
-            df_p["Tipo"].isin(
-                ["Salário", "Subsídio Alimentação"]
-            )
-        ]
-
-        despesas = df_p[
-            df_p["Tipo"] == "Despesa"
-        ]
-
-        st.markdown("### 💰 Receitas")
-
-        if not receitas.empty:
-            st.dataframe(
-                receitas[["Tipo", "Valor", "Data"]],
-                use_container_width=True
-            )
-        else:
-            st.info("Sem receitas neste ciclo")
-
-        st.markdown("### 💸 Despesas")
-
-        if not despesas.empty:
-            st.dataframe(
-                despesas[
-                    ["Categoria", "Valor", "Data"]
-                ],
-                use_container_width=True
-            )
-
-            total = despesas["Valor"].sum()
-
-            st.markdown(
-                f"### 💰 Total de Despesas: **€ {total:.2f}**"
-            )
-        else:
-            st.info("Sem despesas neste ciclo")
+        mostrar_historico_mensal(df, pessoa)
 
     st.stop()
 
 # =========================
-# 🔵 RUBEN / GABI
+# INDIVIDUAL
 # =========================
 st.subheader(f"{avatars[modo]} {modo}")
 
 pessoa = modo
 
-# DASHBOARD INDIVIDUAL
 df_pessoal = filtrar_ciclo(df, pessoa)
-mostrar_dashboard(df_pessoal, pessoa)
 
+mostrar_dashboard(df_pessoal, pessoa)
+mostrar_historico_mensal(df, pessoa)
+
+# =========================
+# ADICIONAR
+# =========================
 tipo = st.selectbox(
     "Tipo",
     ["Salário", "Subsídio Alimentação", "Despesa"]
@@ -371,7 +368,7 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# 🗑 ELIMINAR
+# ELIMINAR
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
