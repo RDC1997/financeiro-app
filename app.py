@@ -50,8 +50,6 @@ def load_data():
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
 
-    df["sheet_row"] = df.index + 2
-
     return df
 
 df = load_data()
@@ -80,7 +78,7 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 🟢 CASAL
+# 🟢 CASAL (CORRIGIDO LIMPO)
 # =========================
 if modo == "Casal":
 
@@ -91,17 +89,29 @@ if modo == "Casal":
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
         df_p = df[df["Pessoa"] == pessoa]
+
+        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
+        # =========================
+        # 💰 RECEITAS (RESTAUROU)
+        # =========================
+        st.markdown("### 💰 Receitas")
+
+        if not receitas.empty:
+            st.table(receitas[["Tipo","Valor","Data"]])
+        else:
+            st.info("Sem receitas")
+
+        # =========================
+        # 💸 DESPESAS
+        # =========================
         st.markdown("### 💸 Despesas")
 
         if not despesas.empty:
 
             despesas = despesas.copy()
 
-            # =========================
-            # DESCRIÇÃO + ÍCONE (CORRIGIDO)
-            # =========================
             despesas["Categoria"] = despesas.apply(
                 lambda r: (
                     f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
@@ -114,33 +124,11 @@ if modo == "Casal":
             st.table(despesas[["Categoria","Valor","Data"]])
 
             # =========================
-            # 🏆 RANKING (COM TOTAL)
+            # 💰 TOTAL DESPESAS (SÓ ISTO)
             # =========================
-            st.markdown("### 🏆 Ranking de Gastos")
+            total = despesas["Valor"].sum()
 
-            ranking = (
-                despesas.groupby("Categoria")["Valor"]
-                .sum()
-                .sort_values(ascending=False)
-                .reset_index()
-            )
-
-            # adicionar ícones ao ranking
-            ranking["Categoria"] = ranking["Categoria"].apply(
-                lambda x: f"{icons.get(x.replace('📦 ','').replace('🏠 ','').replace('🚗 ','').replace('🛒 ','').replace('💡 ','').replace('🚿 ','').replace('📱 ','').replace(' ','').split('-')[0].strip(), '')} {x}"
-                if x != "💰 TOTAL"
-                else x
-            )
-
-            # linha total
-            total = pd.DataFrame({
-                "Categoria": ["💰 TOTAL"],
-                "Valor": [ranking["Valor"].sum()]
-            })
-
-            ranking_final = pd.concat([ranking, total], ignore_index=True)
-
-            st.table(ranking_final)
+            st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
 
         else:
             st.info("Sem despesas")
@@ -202,8 +190,8 @@ for _, row in df[df["Pessoa"] == modo].iterrows():
     c3.write(row["Categoria"])
     c4.write(row["Valor"])
 
-    if c5.button("❌", key=f"del_{row['sheet_row']}"):
-        sheet.delete_rows(row["sheet_row"])
+    if c5.button("❌", key=f"del_{row.name}"):
+        sheet.delete_rows(row.name + 2)
         st.cache_data.clear()
         st.success("Eliminado")
         st.rerun()
