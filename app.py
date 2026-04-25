@@ -13,17 +13,19 @@ if modo == "Casal 👨‍❤️‍👩":
 
     def filtrar_ciclo(df, pessoa):
         last_salary = get_last_salary(df, pessoa)
+
         if last_salary:
             return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
-        return df[df["Pessoa"] == pessoa]
+        else:
+            return df[df["Pessoa"] == pessoa]
 
-    for pessoa in ["Ruben","Gabi"]:
+    for pessoa in ["Ruben", "Gabi"]:
 
-        st.markdown(f"## {avatars[pessoa]} {pessoa}")
+        st.markdown(f"## {avatars.get(pessoa, '👤')} {pessoa}")
 
         df_p = filtrar_ciclo(df, pessoa)
 
-        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+        receitas = df_p[df_p["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
         total_receitas = receitas["Valor"].sum()
@@ -37,17 +39,29 @@ if modo == "Casal 👨‍❤️‍👩":
         c2.metric("💸 Despesas", f"{total_despesas:.2f} €")
         c3.metric("📊 Saldo", f"{saldo:.2f} €")
 
+        # =========================
+        # GRÁFICO (seguro mesmo se vazio)
+        # =========================
         if not despesas.empty:
-            st.bar_chart(despesas.set_index("Categoria")["Valor"])
+            chart_df = despesas.groupby("Categoria", as_index=False)["Valor"].sum()
+            st.bar_chart(chart_df.set_index("Categoria"))
 
         st.markdown("### 💰 Receitas")
-        st.dataframe(receitas, use_container_width=True)
+
+        if not receitas.empty:
+            st.dataframe(receitas, use_container_width=True)
+        else:
+            st.info("Sem receitas neste ciclo")
 
         st.markdown("### 💸 Despesas")
-        st.dataframe(despesas, use_container_width=True)
+
+        if not despesas.empty:
+            st.dataframe(despesas, use_container_width=True)
+        else:
+            st.info("Sem despesas neste ciclo")
 
         # =========================
-        # 🧠 INSIGHT RESTAURADO (o que tinhas "abaixo")
+        # 🧠 INSIGHTS
         # =========================
         st.markdown("### 🧠 Análise rápida")
 
@@ -66,28 +80,36 @@ if modo == "Casal 👨‍❤️‍👩":
         st.markdown("---")
 
         # =========================
-        # 🗑 DELETE REGISTOS (mantido)
+        # 🗑 ELIMINAR REGISTOS (seguro)
         # =========================
         st.markdown("#### 🗑 Eliminar registos")
 
-        for _, row in df_p.iterrows():
-            c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
+        if df_p.empty:
+            st.info("Sem registos para eliminar.")
+        else:
+            for _, row in df_p.iterrows():
 
-            c1.write(row["Pessoa"])
-            c2.write(row["Tipo"])
-            c3.write(row["Categoria"])
-            c4.write(row["Valor"])
+                c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 1])
 
-            if c5.button("❌", key=row["ID"]):
-                data = sheet.get_all_values()
-                headers = data[0]
-                id_index = headers.index("ID")
+                c1.write(row.get("Pessoa", ""))
+                c2.write(row.get("Tipo", ""))
+                c3.write(row.get("Categoria", ""))
+                c4.write(f"{row.get('Valor', 0):.2f} €")
 
-                for i, r in enumerate(data[1:], start=2):
-                    if r[id_index] == row["ID"]:
-                        sheet.delete_rows(i)
-                        break
+                if c5.button("❌", key=str(row.get("ID", ""))):
+                    try:
+                        data = sheet.get_all_values()
+                        headers = data[0]
+                        id_index = headers.index("ID")
 
-                refresh()
+                        for i, r in enumerate(data[1:], start=2):
+                            if r[id_index] == row["ID"]:
+                                sheet.delete_rows(i)
+                                break
+
+                        refresh()
+
+                    except Exception as e:
+                        st.error(f"Erro ao eliminar: {e}")
 
     st.stop()
