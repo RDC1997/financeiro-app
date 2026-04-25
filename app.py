@@ -42,25 +42,21 @@ def load_data():
         return pd.DataFrame()
 
     headers = [h.strip() for h in raw[0]]
-    data = pd.DataFrame(raw[1:], columns=headers)
+    df = pd.DataFrame(raw[1:], columns=headers)
 
-    # limpar headers (espaços + caracteres invisíveis)
-    data.columns = data.columns.str.strip().str.replace("\xa0", "", regex=True)
+    df.columns = df.columns.str.strip().str.replace("\xa0", "", regex=True)
 
-    # garantir colunas obrigatórias
     required = ["Valor", "Mês", "Ano"]
-
     for col in required:
-        if col not in data.columns:
+        if col not in df.columns:
             st.error(f"Coluna em falta no Google Sheets: {col}")
             return pd.DataFrame()
 
-    # conversões seguras
-    data["Valor"] = pd.to_numeric(data["Valor"], errors="coerce").fillna(0)
-    data["Mês"] = pd.to_numeric(data["Mês"], errors="coerce").fillna(0).astype(int)
-    data["Ano"] = pd.to_numeric(data["Ano"], errors="coerce").fillna(0).astype(int)
+    df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
+    df["Mês"] = pd.to_numeric(df["Mês"], errors="coerce").fillna(0).astype(int)
+    df["Ano"] = pd.to_numeric(df["Ano"], errors="coerce").fillna(0).astype(int)
 
-    return data
+    return df
 
 # =========================
 # SAVE DATA
@@ -149,11 +145,55 @@ if st.button("Adicionar"):
 # =========================
 df = load_data()
 
+# =========================
+# DELETE REGISTO
+# =========================
+st.subheader("🗑️ Eliminar registo")
+
 if not df.empty:
 
-    # =========================
-    # FILTRO MÊS / ANO
-    # =========================
+    raw = sheet.get_all_values()
+    headers = raw[0]
+    rows = raw[1:]
+
+    lista = []
+
+    for i, r in enumerate(rows, start=2):
+        if len(r) >= 5:
+            lista.append({
+                "linha": i,
+                "Pessoa": r[0],
+                "Tipo": r[1],
+                "Categoria": r[2],
+                "Descrição": r[3],
+                "Valor": r[4],
+                "Data": r[5] if len(r) > 5 else ""
+            })
+
+    df_delete = pd.DataFrame(lista)
+
+    escolha = st.selectbox(
+        "Seleciona o registo",
+        df_delete.index,
+        format_func=lambda x:
+            f"{df_delete.loc[x,'Pessoa']} | {df_delete.loc[x,'Tipo']} | €{df_delete.loc[x,'Valor']}"
+    )
+
+    linha_real = int(df_delete.loc[escolha, "linha"])
+
+    if st.button("🗑️ Apagar registo"):
+        sheet.delete_rows(linha_real)
+        st.success("Registo eliminado com sucesso")
+        st.rerun()
+
+else:
+    st.info("Sem dados ainda para eliminar")
+
+# =========================
+# FILTRO
+# =========================
+if not df.empty:
+
     st.subheader("📅 Filtro")
 
     col_f1, col_f2 = st.columns(2)
@@ -197,9 +237,7 @@ if not df.empty:
     if despesas > receitas:
         st.warning("⚠️ As despesas ultrapassaram as receitas este mês.")
 
-    # =========================
-    # DESPESAS POR CATEGORIA
-    # =========================
+    # Categoria
     despesas_df = df[df["Tipo"] == "Despesa"]
 
     if not despesas_df.empty:
@@ -213,17 +251,13 @@ if not df.empty:
         top = categoria_total.sort_values("Valor", ascending=False).iloc[0]
         st.info(f"Maior gasto: {top['Categoria']} → € {top['Valor']:.2f}")
 
-    # =========================
-    # RUBEN VS GABI
-    # =========================
+    # Ruben vs Gabi
     st.subheader("⚖️ Ruben vs Gabi")
 
     fig2 = px.bar(df.groupby("Pessoa")["Valor"].sum().reset_index(), x="Pessoa", y="Valor", text="Valor")
     st.plotly_chart(fig2, use_container_width=True)
 
-    # =========================
-    # META FINANCEIRA
-    # =========================
+    # Meta
     st.subheader("🎯 Meta Financeira")
 
     meta = 10000
@@ -233,9 +267,7 @@ if not df.empty:
     st.write(f"Objetivo: € {meta:.2f}")
     st.write(f"Atual: € {saldo:.2f}")
 
-    # =========================
-    # BACKUP
-    # =========================
+    # Backup
     st.subheader("⬇️ Backup")
 
     csv = df.to_csv(index=False).encode("utf-8")
