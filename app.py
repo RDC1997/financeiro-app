@@ -32,7 +32,7 @@ sheet = client.open_by_url(
 ).sheet1
 
 # =========================
-# LOAD DATA (ROBUSTO)
+# LOAD DATA
 # =========================
 def normalize_person(x):
     x = str(x).strip().lower()
@@ -66,9 +66,7 @@ def guardar(d):
         d["Categoria"],
         d["Descrição"],
         float(d["Valor"]),
-        str(d["Data"]),
-        0,
-        0
+        str(d["Data"])
     ])
 
 df = load_data()
@@ -80,7 +78,7 @@ st.sidebar.header("👁️ Modo")
 
 modo = st.sidebar.selectbox(
     "Visualização",
-    ["Casal", "Ruben", "Gabi"]
+    ["Casal (Só leitura)", "Ruben", "Gabi"]
 )
 
 df_view = df.copy()
@@ -92,53 +90,52 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# NOVO REGISTO (COM BLOQUEIO INTELIGENTE)
+# NOVO REGISTO (SÓ R/G)
 # =========================
-st.subheader("➕ Novo registo")
+if modo != "Casal (Só leitura)":
 
-col1, col2 = st.columns(2)
+    st.subheader("➕ Novo registo")
 
-with col1:
+    col1, col2 = st.columns(2)
 
-    # 🔥 REGRA IMPORTANTE
-    if modo == "Ruben":
-        pessoa = "Ruben"
-        st.info("Registo será automaticamente atribuído a Ruben")
-    elif modo == "Gabi":
-        pessoa = "Gabi"
-        st.info("Registo será automaticamente atribuído a Gabi")
-    else:
-        pessoa = st.selectbox("Pessoa", ["Ruben", "Gabi"])
+    with col1:
 
-    tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
+        pessoa = modo  # 🔥 FIX: bloqueado ao modo
 
-    categoria = ""
-    descricao = ""
+        st.info(f"Registo automático para {pessoa}")
 
-    if tipo == "Despesa":
-        categoria = st.selectbox(
-            "Categoria",
-            ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"]
-        )
+        tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
-        if categoria == "Outros":
-            descricao = st.text_input("Descrição")
+        categoria = ""
+        descricao = ""
 
-with col2:
-    valor = st.number_input("Valor (€)", min_value=0.0)
-    data = st.date_input("Data", datetime.today())
+        if tipo == "Despesa":
+            categoria = st.selectbox(
+                "Categoria",
+                ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"]
+            )
 
-if st.button("Adicionar"):
-    guardar({
-        "Pessoa": pessoa,
-        "Tipo": tipo,
-        "Categoria": categoria,
-        "Descrição": descricao,
-        "Valor": valor,
-        "Data": data
-    })
-    st.success("Adicionado com sucesso")
-    st.rerun()
+            if categoria == "Outros":
+                descricao = st.text_input("Descrição")
+
+    with col2:
+        valor = st.number_input("Valor (€)", min_value=0.0)
+        data = st.date_input("Data", datetime.today())
+
+    if st.button("Adicionar"):
+        guardar({
+            "Pessoa": pessoa,
+            "Tipo": tipo,
+            "Categoria": categoria,
+            "Descrição": descricao,
+            "Valor": valor,
+            "Data": data
+        })
+        st.success("Adicionado com sucesso")
+        st.rerun()
+
+else:
+    st.info("Modo leitura: não é possível adicionar ou editar neste modo.")
 
 # =========================
 # RESUMO
@@ -161,7 +158,7 @@ if not df_view.empty:
     # =========================
     # GASTOS
     # =========================
-    st.subheader("📉 Gastos")
+    st.subheader("📉 Gastos por categoria")
 
     gastos = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
 
@@ -172,37 +169,38 @@ if not df_view.empty:
     st.markdown("---")
 
     # =========================
-    # ELIMINAR (ÚNICA AÇÃO)
+    # ELIMINAR (SÓ R E G)
     # =========================
-    st.subheader("🗑️ Eliminar registo")
+    if modo != "Casal (Só leitura)":
 
-    raw = sheet.get_all_values()
-    rows = raw[1:]
+        st.subheader("🗑️ Eliminar registo")
 
-    data = []
-    for i, r in enumerate(rows, start=2):
-        if len(r) >= 5:
-            data.append({
-                "linha": i,
-                "Pessoa": r[0],
-                "Tipo": r[1],
-                "Valor": r[4]
-            })
+        raw = sheet.get_all_values()
+        rows = raw[1:]
 
-    df_del = pd.DataFrame(data)
+        data = []
+        for i, r in enumerate(rows, start=2):
+            if len(r) >= 5:
+                data.append({
+                    "linha": i,
+                    "Pessoa": r[0],
+                    "Valor": r[4]
+                })
 
-    if not df_del.empty:
+        df_del = pd.DataFrame(data)
 
-        idx = st.selectbox("Seleciona registo", df_del.index)
-        linha = int(df_del.loc[idx, "linha"])
+        if not df_del.empty:
 
-        confirmar = st.checkbox("Confirmo eliminação")
+            idx = st.selectbox("Seleciona registo", df_del.index)
+            linha = int(df_del.loc[idx, "linha"])
 
-        if confirmar:
-            if st.button("Eliminar"):
-                sheet.delete_rows(linha)
-                st.success("Eliminado")
-                st.rerun()
+            confirmar = st.checkbox("Confirmo eliminação")
+
+            if confirmar:
+                if st.button("Eliminar"):
+                    sheet.delete_rows(linha)
+                    st.success("Eliminado")
+                    st.rerun()
 
 else:
     st.info("Sem dados ainda")
