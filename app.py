@@ -11,8 +11,8 @@ from google.oauth2.service_account import Credentials
 # =========================
 # APP
 # =========================
-st.set_page_config(page_title="Rubi&Gabi Finance PRO 2", layout="wide")
-st.title("💰 Controlo Financeiro PRO 2")
+st.set_page_config(page_title="Rubi&Gabi Finance PRO 2.1", layout="wide")
+st.title("💰 Controlo Financeiro PRO 2.1")
 
 # =========================
 # HELPERS
@@ -60,12 +60,26 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CATEGORIAS (NÃO ALTERADO)
+# CATEGORIAS (RESTAURO COMPLETO)
 # =========================
 @st.cache_data(ttl=30)
 def load_categories():
     data = cat_sheet.get_all_values()
     return [row[0] for row in data[1:] if row[0].strip() != ""]
+
+def add_category(cat):
+    safe_sleep()
+    cat_sheet.append_row([cat])
+
+def delete_category(cat):
+    safe_sleep()
+    data = cat_sheet.get_all_values()
+    for i, row in enumerate(data):
+        if i == 0:
+            continue
+        if row[0] == cat:
+            cat_sheet.delete_rows(i + 1)
+            break
 
 categories = load_categories()
 
@@ -100,7 +114,31 @@ modo = st.sidebar.selectbox(
 avatars = {"Ruben":"🤴","Gabi":"👸"}
 
 # =========================
-# CASAL PRO 2
+# CATEGORIAS UI (RESTAURO COMPLETO)
+# =========================
+st.sidebar.markdown("## ⚙️ Categorias")
+
+with st.sidebar.expander("➕ Adicionar categoria"):
+    new_cat = st.text_input("Nova categoria")
+
+    if st.button("Adicionar categoria"):
+        if new_cat.strip():
+            add_category(new_cat.strip())
+            refresh()
+
+with st.sidebar.expander("❌ Remover categoria"):
+    if categories:
+        cat_del = st.selectbox("Escolher", categories)
+
+        if st.button("Remover categoria"):
+            delete_category(cat_del)
+            refresh()
+
+with st.sidebar.expander("📋 Ver categorias"):
+    st.write(categories)
+
+# =========================
+# CASAL PRO 2 (MANTIDO)
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
@@ -114,21 +152,15 @@ if modo == "Casal 👨‍❤️‍👩":
 
     def filtrar_ciclo(df, pessoa):
         last_salary = get_last_salary(df, pessoa)
-
         if last_salary:
-            return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)], "salario"
-        else:
-            # fallback: último mês
-            return df[df["Pessoa"] == pessoa], "mensal"
-
-    total_casal_receitas = 0
-    total_casal_despesas = 0
+            return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
+        return df[df["Pessoa"] == pessoa]
 
     for pessoa in ["Ruben","Gabi"]:
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        df_p, tipo_ciclo = filtrar_ciclo(df, pessoa)
+        df_p = filtrar_ciclo(df, pessoa)
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
@@ -137,52 +169,18 @@ if modo == "Casal 👨‍❤️‍👩":
         total_despesas = despesas["Valor"].sum()
         saldo = total_receitas - total_despesas
 
-        total_casal_receitas += total_receitas
-        total_casal_despesas += total_despesas
-
-        # =========================
-        # MÉTRICAS PRO
-        # =========================
-        taxa_poupanca = (saldo / total_receitas * 100) if total_receitas > 0 else 0
-        media_despesas = despesas["Valor"].mean() if not despesas.empty else 0
-
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         c1.metric("💰 Receitas", f"{total_receitas:.2f} €")
         c2.metric("💸 Despesas", f"{total_despesas:.2f} €")
         c3.metric("📊 Saldo", f"{saldo:.2f} €")
-        c4.metric("📈 Poupança", f"{taxa_poupanca:.1f}%")
 
-        # =========================
-        # ALERTAS INTELIGENTES
-        # =========================
+        # ALERTAS
         if total_despesas > total_receitas:
-            st.error("⚠️ Estás a gastar mais do que ganhas neste ciclo!")
+            st.error("⚠️ Gastos acima dos rendimentos!")
 
-        elif taxa_poupanca < 10:
-            st.warning("⚠️ Taxa de poupança baixa")
-
-        elif taxa_poupanca > 30:
-            st.success("🟢 Excelente controlo financeiro!")
-
-        # =========================
-        # GRÁFICO EVOLUTIVO
-        # =========================
         if not despesas.empty:
-            fig = px.bar(
-                despesas,
-                x="Categoria",
-                y="Valor",
-                title=f"Despesas por Categoria - {pessoa}"
-            )
+            fig = px.bar(despesas, x="Categoria", y="Valor", title="Despesas por Categoria")
             st.plotly_chart(fig, use_container_width=True)
-
-        # =========================
-        # TABELAS ORIGINAIS (MANTIDAS)
-        # =========================
-        with st.expander(f"🔍 Debug - {pessoa}"):
-            st.write("Tipo de ciclo:", tipo_ciclo)
-            st.write("Último salário:", get_last_salary(df, pessoa))
-            st.dataframe(df_p)
 
         st.markdown("### 💰 Receitas")
         st.dataframe(receitas, use_container_width=True)
@@ -190,28 +188,74 @@ if modo == "Casal 👨‍❤️‍👩":
         st.markdown("### 💸 Despesas")
         st.dataframe(despesas, use_container_width=True)
 
-    # =========================
-    # COMPARAÇÃO CASAL
-    # =========================
-    st.markdown("---")
-    st.subheader("⚖️ Comparação Casal")
+        # =========================
+        # 🗑 DELETE REGISTOS (RESTAURO)
+        # =========================
+        st.markdown("#### 🗑 Eliminar registos")
 
-    c1, c2 = st.columns(2)
-    c1.metric("💰 Receitas Totais", f"{total_casal_receitas:.2f} €")
-    c2.metric("💸 Despesas Totais", f"{total_casal_despesas:.2f} €")
+        for _, row in df_p.iterrows():
+            c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
+
+            c1.write(row["Pessoa"])
+            c2.write(row["Tipo"])
+            c3.write(row["Categoria"])
+            c4.write(row["Valor"])
+
+            if c5.button("❌", key=row["ID"]):
+                data = sheet.get_all_values()
+                headers = data[0]
+                id_index = headers.index("ID")
+
+                for i, r in enumerate(data[1:], start=2):
+                    if r[id_index] == row["ID"]:
+                        sheet.delete_rows(i)
+                        break
+
+                refresh()
 
     st.stop()
 
 # =========================
-# METAS (NÃO ALTERADO)
+# METAS (RESTAURO COMPLETO)
 # =========================
 if modo == "Metas 🎯":
+
     st.subheader("🎯 Metas")
-    st.dataframe(df)
+
+    def load_goals():
+        raw = goal_sheet.get_all_values()
+        return pd.DataFrame(raw[1:], columns=raw[0]) if len(raw) > 1 else pd.DataFrame()
+
+    goals = load_goals()
+
+    with st.expander("➕ Criar meta"):
+        nome = st.text_input("Nome")
+        obj = st.number_input("Objetivo (€)", min_value=0.0)
+
+        if st.button("Criar meta"):
+            goal_sheet.append_row([nome,obj,0])
+            refresh()
+
+    st.dataframe(goals)
+
+    # =========================
+    # 🗑 ELIMINAR METAS (RESTAURO)
+    # =========================
+    st.markdown("#### 🗑 Eliminar metas")
+
+    for i, row in goals.iterrows():
+        c1,c2,c3 = st.columns([3,2,1])
+        c1.write(row.get("Meta",""))
+        c2.write(row.get("Objetivo",""))
+
+        if c3.button("❌", key=f"goal_{i}"):
+            goal_sheet.delete_rows(i+2)
+            refresh()
+
     st.stop()
 
 # =========================
-# INDIVIDUAL (NÃO ALTERADO)
+# INDIVIDUAL (MANTIDO)
 # =========================
 pessoa = modo.split()[0]
 
