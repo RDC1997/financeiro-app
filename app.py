@@ -85,28 +85,15 @@ with col2:
     )
     data = st.date_input("Data", datetime.today())
 
-if tipo == "Despesa":
-    categoria = st.selectbox(
-        "Categoria",
-        [
-            "Renda",
-            "Água",
-            "Luz",
-            "Vodafone",
-            "Alimentação",
-            "Gasolina",
-            "Outros"
-        ]
-    )
-
-    if categoria == "Outros":
-        descricao = st.text_input("Descrição")
+if categoria == "Outros":
+            descricao = st.text_input("Descrição")
 
 categoria = ""
 descricao = ""
 
-if tipo == "Despesa":
-    categoria = st.selectbox(
+with col1:
+    if tipo == "Despesa":
+        categoria = st.selectbox(
         "Categoria",
         [
             "Renda",
