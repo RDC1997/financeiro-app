@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 # =========================
 # APP
 # =========================
-st.set_page_config(page_title="Rubi&Gabi", layout="wide")
+st.set_page_config(page_title="Rubi&Gabi Finance", layout="wide")
 st.title("💰 Controlo Financeiro")
 
 # =========================
@@ -27,8 +27,7 @@ try:
     )
 
     client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME")
-    sheet = spreadsheet.get_worksheet(0)
+    sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
 
 except Exception as e:
     st.error("❌ Erro ao ligar ao Google Sheets")
@@ -50,6 +49,9 @@ def load_data():
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
+
+    # 🔧 DATA LIMPA
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
     return df
 
@@ -86,82 +88,78 @@ avatars = {
 # =========================
 # MODO
 # =========================
-modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"], key="modo")
+modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# CASAL (VISUALIZAÇÃO)
+# 📅 FILTRO POR MÊS
+# =========================
+if not df.empty and "Data" in df.columns:
+    meses = sorted(df["Data"].dropna().dt.to_period("M").unique().astype(str))
+    mes_escolhido = st.sidebar.selectbox("Mês", ["Atual"] + meses)
+
+    if mes_escolhido == "Atual":
+        hoje = pd.Timestamp.today().to_period("M")
+        df = df[df["Data"].dt.to_period("M") == hoje]
+    else:
+        df = df[df["Data"].dt.to_period("M").astype(str) == mes_escolhido]
+
+# =========================
+# 🟢 CASAL (DASHBOARD LIMPO)
 # =========================
 if modo == "Casal":
+
+    st.subheader("📊 Dashboard Mensal")
+
+    receitas = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]["Valor"].sum()
+    despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
+    saldo = receitas - despesas
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("💰 Receitas", f"€ {receitas:.2f}")
+    col2.metric("💸 Despesas", f"€ {despesas:.2f}")
+    col3.metric("⚖️ Saldo", f"€ {saldo:.2f}")
+
+    st.markdown("---")
 
     for pessoa in ["Ruben", "Gabi"]:
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        df_pessoa = df[df["Pessoa"] == pessoa]
+        df_p = df[df["Pessoa"] == pessoa]
 
-        receitas = df_pessoa[df_pessoa["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
-        despesas = df_pessoa[df_pessoa["Tipo"] == "Despesa"]
+        r = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
+        d = df_p[df_p["Tipo"] == "Despesa"]["Valor"].sum()
 
-        st.markdown("### 💰 Receitas")
-
-        if not receitas.empty:
-            tabela_r = receitas[["Tipo", "Valor"]].groupby("Tipo").sum().reset_index()
-            tabela_r["Valor"] = tabela_r["Valor"].apply(lambda x: f"{x:.0f}")
-            st.table(tabela_r)
-        else:
-            st.info("Sem receitas")
-
-        st.markdown("### 💸 Despesas")
-
-        if not despesas.empty:
-            despesas = despesas.copy()
-
-            # 🔥 FIX IMPORTANTE: juntar categoria + descrição
-            despesas["Categoria"] = despesas.apply(
-                lambda row: f"{icons.get(row['Categoria'], '')} {row['Categoria']} - {row['Descrição']}" 
-                if row["Categoria"] == "Outros"
-                else f"{icons.get(row['Categoria'], '')} {row['Categoria']}",
-                axis=1
-            )
-
-            tabela_d = despesas[["Categoria", "Valor"]].groupby("Categoria").sum().reset_index()
-            tabela_d["Valor"] = tabela_d["Valor"].apply(lambda x: f"{x:.0f}")
-
-            st.table(tabela_d)
-
-        else:
-            st.info("Sem despesas")
+        c1, c2 = st.columns(2)
+        c1.metric("💰 Receitas", f"€ {r:.2f}")
+        c2.metric("💸 Despesas", f"€ {d:.2f}")
 
         st.markdown("---")
 
     st.stop()
 
 # =========================
-# GESTÃO
+# 🔵 GESTÃO (R / G)
 # =========================
 st.subheader("➕ Novo registo")
 
 pessoa = modo
 
-tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"], key="tipo_add")
+tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
 categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
-    categoria = st.selectbox(
-        "Categoria",
-        list(icons.keys()),
-        key="cat_add"
-    )
+    categoria = st.selectbox("Categoria", list(icons.keys()))
 
     if categoria == "Outros":
-        descricao = st.text_input("Descrição", key="desc_add")
+        descricao = st.text_input("Descrição")
 
-valor = st.number_input("Valor (€)", min_value=0.0, key="valor_add")
-data = st.date_input("Data", datetime.today(), key="data_add")
+valor = st.number_input("Valor (€)", min_value=0.0)
+data = st.date_input("Data", datetime.today())
 
-if st.button("Adicionar", key="btn_add"):
+if st.button("Adicionar"):
     guardar({
         "Pessoa": pessoa,
         "Tipo": tipo,
