@@ -12,7 +12,7 @@ st.set_page_config(page_title="Rubi&Gabi", layout="wide")
 st.title("💰 Controlo Financeiro")
 
 # =========================
-# GOOGLE SHEETS
+# GOOGLE SHEETS (FIX DEFINITIVO)
 # =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -27,12 +27,13 @@ creds = Credentials.from_service_account_info(
 
 client = gspread.authorize(creds)
 
-sheet = client.open_by_url(
-    "https://docs.google.com/spreadsheets/d/1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME/edit"
+# 🔥 FIX IMPORTANTE: open_by_key (mais estável)
+sheet = client.open_by_key(
+    "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
 ).sheet1
 
 # =========================
-# LOAD DATA
+# LOAD DATA (ROBUSTO)
 # =========================
 def normalize_person(x):
     x = str(x).strip().lower()
@@ -78,7 +79,7 @@ st.sidebar.header("👁️ Modo")
 
 modo = st.sidebar.selectbox(
     "Visualização",
-    ["Casal (Só leitura)", "Ruben", "Gabi"]
+    ["Casal", "Ruben", "Gabi"]
 )
 
 df_view = df.copy()
@@ -90,9 +91,9 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# NOVO REGISTO (SÓ R/G)
+# NOVO REGISTO (BLOQUEADO POR MODO)
 # =========================
-if modo != "Casal (Só leitura)":
+if modo != "Casal":
 
     st.subheader("➕ Novo registo")
 
@@ -100,9 +101,8 @@ if modo != "Casal (Só leitura)":
 
     with col1:
 
-        pessoa = modo  # 🔥 FIX: bloqueado ao modo
-
-        st.info(f"Registo automático para {pessoa}")
+        # 🔥 FIX: pessoa bloqueada automaticamente
+        pessoa = modo
 
         tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
@@ -134,9 +134,6 @@ if modo != "Casal (Só leitura)":
         st.success("Adicionado com sucesso")
         st.rerun()
 
-else:
-    st.info("Modo leitura: não é possível adicionar ou editar neste modo.")
-
 # =========================
 # RESUMO
 # =========================
@@ -156,9 +153,9 @@ if not df_view.empty:
     st.markdown("---")
 
     # =========================
-    # GASTOS
+    # GASTOS POR CATEGORIA
     # =========================
-    st.subheader("📉 Gastos por categoria")
+    st.subheader("📉 Gastos")
 
     gastos = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
 
@@ -171,7 +168,7 @@ if not df_view.empty:
     # =========================
     # ELIMINAR (SÓ R E G)
     # =========================
-    if modo != "Casal (Só leitura)":
+    if modo != "Casal":
 
         st.subheader("🗑️ Eliminar registo")
 
