@@ -34,7 +34,7 @@ except Exception:
     st.stop()
 
 # =========================
-# DATA (ROBUSTO - SEM CRASH)
+# DATA (ROBUSTO)
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -42,14 +42,12 @@ def load_data():
 
     expected_cols = ["Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
 
-    # se não houver dados
     if not raw or len(raw) < 2:
         return pd.DataFrame(columns=expected_cols)
 
     headers = [h.strip() for h in raw[0]]
     df = pd.DataFrame(raw[1:], columns=headers)
 
-    # 🔒 garantir colunas sempre existentes
     for col in expected_cols:
         if col not in df.columns:
             df[col] = ""
@@ -58,9 +56,7 @@ def load_data():
     df["Tipo"] = df["Tipo"].astype(str).str.strip()
     df["Categoria"] = df["Categoria"].astype(str).str.strip()
     df["Descrição"] = df["Descrição"].astype(str).fillna("")
-
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
 
     df["sheet_row"] = df.index + 2
@@ -93,7 +89,7 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 🟢 CASAL (ESTÁVEL)
+# 🟢 CASAL
 # =========================
 if modo == "Casal":
 
@@ -138,9 +134,6 @@ if modo == "Casal":
 
             st.table(despesas[["Categoria","Valor","Data"]])
 
-            # =========================
-            # 💰 TOTAL DESPESAS
-            # =========================
             total = despesas["Valor"].sum()
             st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
 
@@ -150,9 +143,9 @@ if modo == "Casal":
     st.stop()
 
 # =========================
-# 🔵 GESTÃO (RUBEN / GABI)
+# 🔵 GESTÃO
 # =========================
-st.subheader(f"➕ Novo registo ({modo})")
+st.subheader(f"{avatars[modo]} {modo}")
 
 pessoa = modo
 
@@ -170,7 +163,7 @@ if tipo == "Despesa":
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
-# ❌ bloqueio data futura
+# ❌ bloquear datas futuras
 if data > datetime.today().date():
     st.error("Não podes escolher data futura")
     st.stop()
