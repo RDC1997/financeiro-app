@@ -90,7 +90,7 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# FILTRO MÊS
+# 📅 FILTRO MÊS (FIXED)
 # =========================
 if not df.empty:
     df["Mes"] = df["Data"].dt.to_period("M").astype(str)
@@ -99,13 +99,13 @@ if not df.empty:
     mes = st.sidebar.selectbox("Mês", ["Atual"] + meses)
 
     if mes == "Atual":
-        atual = pd.Timestamp.today().to_period("M").astype(str)
+        atual = str(pd.Timestamp.today().to_period("M"))
         df = df[df["Mes"] == atual]
     else:
         df = df[df["Mes"] == mes]
 
 # =========================
-# 🟢 CASAL
+# 🟢 CASAL (DASHBOARD)
 # =========================
 if modo == "Casal":
 
@@ -122,7 +122,7 @@ if modo == "Casal":
     st.markdown("---")
 
     # =========================
-    # 🔵 DETALHE RECEITAS
+    # DETALHE RECEITAS
     # =========================
     st.markdown("## 💰 Receitas (detalhe)")
     if not receitas.empty:
@@ -131,10 +131,9 @@ if modo == "Casal":
         st.info("Sem receitas")
 
     # =========================
-    # 🔴 DETALHE DESPESAS
+    # DETALHE DESPESAS
     # =========================
     st.markdown("## 💸 Despesas (detalhe)")
-
     if not despesas.empty:
 
         despesas = despesas.copy()
