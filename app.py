@@ -71,7 +71,6 @@ def load_data():
         errors="coerce"
     ).dt.date
 
-    # linha real da sheet (começa na linha 2 porque linha 1 = cabeçalho)
     df["sheet_row"] = df.index + 2
 
     return df
@@ -113,11 +112,6 @@ def filtrar_ciclo(df, pessoa):
 # 🛡 DELETE SEGURO
 # =========================
 def delete_row_safe(target_row):
-    """
-    Recarrega os dados antes de apagar para evitar
-    erros quando as linhas mudam de posição.
-    """
-
     fresh_raw = sheet.get_all_values()
 
     if len(fresh_raw) < target_row:
@@ -129,6 +123,76 @@ def delete_row_safe(target_row):
     except Exception as e:
         st.error(f"Erro ao eliminar: {e}")
         return False
+
+
+# =========================
+# 📊 DASHBOARD
+# =========================
+def mostrar_dashboard(df_pessoa, pessoa):
+    st.markdown(f"## 📈 Dashboard de {pessoa}")
+
+    receitas = df_pessoa[
+        df_pessoa["Tipo"].isin(
+            ["Salário", "Subsídio Alimentação"]
+        )
+    ]
+
+    despesas = df_pessoa[
+        df_pessoa["Tipo"] == "Despesa"
+    ]
+
+    total_receitas = receitas["Valor"].sum()
+    total_despesas = despesas["Valor"].sum()
+    saldo_atual = total_receitas - total_despesas
+
+    maior_categoria = "—"
+
+    if not despesas.empty:
+        maior = (
+            despesas.groupby("Categoria")["Valor"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+
+        if not maior.empty:
+            maior_categoria = maior.index[0]
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "💰 Receitas",
+        f"€ {total_receitas:.2f}"
+    )
+
+    c2.metric(
+        "💸 Despesas",
+        f"€ {total_despesas:.2f}"
+    )
+
+    c3.metric(
+        "🏦 Saldo Atual",
+        f"€ {saldo_atual:.2f}"
+    )
+
+    c4.metric(
+        "🔥 Maior Gasto",
+        maior_categoria
+    )
+
+    if not despesas.empty:
+        st.markdown("### 📊 Despesas por Categoria")
+
+        grafico = (
+            despesas.groupby("Categoria")["Valor"]
+            .sum()
+            .reset_index()
+        )
+
+        st.bar_chart(
+            grafico.set_index("Categoria")
+        )
+
+    st.markdown("---")
 
 
 # =========================
@@ -168,12 +232,11 @@ if modo == "Casal":
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        # 🔥 CICLO
         df_p = filtrar_ciclo(df, pessoa)
 
-        # =========================
-        # 🧪 DEBUG DO CICLO
-        # =========================
+        # NOVO DASHBOARD
+        mostrar_dashboard(df_p, pessoa)
+
         with st.expander(f"🔍 Debug do ciclo - {pessoa}"):
 
             st.write(
@@ -236,6 +299,10 @@ if modo == "Casal":
 st.subheader(f"{avatars[modo]} {modo}")
 
 pessoa = modo
+
+# DASHBOARD INDIVIDUAL
+df_pessoal = filtrar_ciclo(df, pessoa)
+mostrar_dashboard(df_pessoal, pessoa)
 
 tipo = st.selectbox(
     "Tipo",
