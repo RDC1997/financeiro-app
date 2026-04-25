@@ -92,27 +92,55 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# CASAL (VISUAL LIMPO)
+# 🟢 CASAL (SÓ VISUALIZAÇÃO)
 # =========================
 if modo == "Casal":
 
     st.subheader("📊 Visão Geral")
 
-    receitas = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]["Valor"].sum()
-    despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
-    saldo = receitas - despesas
+    for pessoa in ["Ruben", "Gabi"]:
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("💰 Receitas", f"€ {receitas:.2f}")
-    c2.metric("💸 Despesas", f"€ {despesas:.2f}")
-    c3.metric("⚖️ Saldo", f"€ {saldo:.2f}")
+        st.markdown(f"## 👤 {pessoa}")
 
-    st.markdown("---")
+        df_pessoa = df[df["Pessoa"] == pessoa]
+
+        receitas = df_pessoa[df_pessoa["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
+        despesas = df_pessoa[df_pessoa["Tipo"] == "Despesa"]
+
+        # =========================
+        # RECEITAS
+        # =========================
+        st.markdown("### 💰 Receitas")
+
+        if not receitas.empty:
+            tabela_r = receitas[["Tipo", "Valor"]].groupby("Tipo").sum().reset_index()
+            st.table(tabela_r)
+        else:
+            st.info("Sem receitas")
+
+        # =========================
+        # DESPESAS
+        # =========================
+        st.markdown("### 💸 Despesas")
+
+        if not despesas.empty:
+
+            tabela_d = despesas.copy()
+            tabela_d["Categoria"] = tabela_d["Categoria"].map(icons) + " " + tabela_d["Categoria"]
+
+            tabela_d = tabela_d[["Categoria", "Valor"]].groupby("Categoria").sum().reset_index()
+
+            st.table(tabela_d)
+
+        else:
+            st.info("Sem despesas")
+
+        st.markdown("---")
 
     st.stop()
 
 # =========================
-# ADICIONAR
+# 🔵 R / G (GESTÃO)
 # =========================
 st.subheader("➕ Novo registo")
 
@@ -149,42 +177,3 @@ if st.button("Adicionar", key="btn_add"):
     st.cache_data.clear()
     st.success("Adicionado com sucesso")
     st.rerun()
-
-# =========================
-# TABELAS LIMPAS (RUBEN / GABI)
-# =========================
-st.markdown("---")
-st.subheader(f"📋 Registos de {modo}")
-
-receitas = df_view[df_view["Tipo"].isin(["Salário","Subsídio Alimentação"])]
-despesas = df_view[df_view["Tipo"] == "Despesa"]
-
-# -------------------------
-# RECEITAS
-# -------------------------
-st.markdown("### 💰 Receitas")
-
-if not receitas.empty:
-    receitas_tabela = receitas[["Tipo", "Valor"]].groupby("Tipo").sum().reset_index()
-    st.table(receitas_tabela)
-else:
-    st.info("Sem receitas")
-
-# -------------------------
-# DESPESAS
-# -------------------------
-st.markdown("### 💸 Despesas")
-
-if not despesas.empty:
-
-    despesas["Icon"] = despesas["Categoria"].map(icons)
-
-    tabela = despesas[["Categoria", "Valor"]].copy()
-    tabela["Categoria"] = tabela["Categoria"].map(icons) + " " + tabela["Categoria"]
-
-    tabela = tabela.groupby("Categoria").sum().reset_index()
-
-    st.table(tabela)
-
-else:
-    st.info("Sem despesas")
