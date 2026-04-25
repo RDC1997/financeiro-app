@@ -48,24 +48,13 @@ def load_data():
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
+    # 🔥 DATA SEM HORA (CORREÇÃO)
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
 
     df["sheet_row"] = df.index + 2
 
     return df
-
-def guardar(d):
-    sheet.append_row([
-        d["Pessoa"],
-        d["Tipo"],
-        d["Categoria"],
-        d["Descrição"],
-        float(d["Valor"]),
-        str(d["Data"])
-    ])
-
-def eliminar_linha(row):
-    sheet.delete_rows(row)
 
 df = load_data()
 
@@ -90,129 +79,54 @@ avatars = {
 # =========================
 # MODO
 # =========================
-modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
+modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi", "Todos"])
 
 # =========================
-# FILTRO MÊS
+# 🟣 TODOS (SEPARADO POR PESSOA)
 # =========================
-if not df.empty:
-    df["Mes"] = df["Data"].dt.to_period("M").astype(str)
+if modo == "Todos":
 
-    meses = sorted(df["Mes"].dropna().unique())
-    mes = st.sidebar.selectbox("Mês", ["Atual"] + meses)
+    for pessoa in ["Ruben", "Gabi"]:
 
-    if mes == "Atual":
-        atual = str(pd.Timestamp.today().to_period("M"))
-        df = df[df["Mes"] == atual]
-    else:
-        df = df[df["Mes"] == mes]
+        st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-# =========================
-# 🟢 CASAL (CORRIGIDO)
-# =========================
-if modo == "Casal":
+        df_p = df[df["Pessoa"] == pessoa]
 
-    st.subheader("📊 Dashboard")
+        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+        despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-    receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]
-    despesas = df[df["Tipo"] == "Despesa"]
+        # =========================
+        # RECEITAS
+        # =========================
+        st.markdown("### 💰 Receitas")
+        if not receitas.empty:
+            st.table(
+                receitas[["Tipo","Valor","Data"]]
+            )
+        else:
+            st.info("Sem receitas")
 
-    st.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
-    st.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
+        # =========================
+        # DESPESAS
+        # =========================
+        st.markdown("### 💸 Despesas")
+        if not despesas.empty:
 
-    st.markdown("---")
+            despesas = despesas.copy()
 
-    # =========================
-    # RECEITAS (RESTAUROU)
-    # =========================
-    st.markdown("## 💰 Receitas")
+            despesas["Categoria"] = despesas.apply(
+                lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
+                if r["Categoria"] == "Outros"
+                else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
+                axis=1
+            )
 
-    if not receitas.empty:
-        st.table(receitas[["Pessoa","Tipo","Valor","Data"]])
-    else:
-        st.info("Sem receitas")
+            st.table(
+                despesas[["Categoria","Valor","Data"]]
+            )
+        else:
+            st.info("Sem despesas")
 
-    # =========================
-    # DESPESAS
-    # =========================
-    st.markdown("## 💸 Despesas")
-
-    if not despesas.empty:
-
-        despesas = despesas.copy()
-
-        despesas["Categoria"] = despesas.apply(
-            lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
-            if r["Categoria"] == "Outros" and r["Descrição"]
-            else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
-            axis=1
-        )
-
-        st.table(despesas[["Pessoa","Categoria","Valor","Data"]])
-
-    else:
-        st.info("Sem despesas")
+        st.markdown("---")
 
     st.stop()
-
-# =========================
-# 🔵 GESTÃO (CORRIGIDO OUTROS + DATA)
-# =========================
-st.subheader("➕ Novo registo")
-
-pessoa = modo
-
-tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
-
-categoria = ""
-descricao = ""
-
-if tipo == "Despesa":
-    categoria = st.selectbox("Categoria", list(icons.keys()))
-
-    if categoria == "Outros":
-        descricao = st.text_input("Descrição obrigatória")
-
-valor = st.number_input("Valor (€)", min_value=0.0)
-
-# 🔒 BLOQUEIO DATA FUTURA
-data = st.date_input("Data", datetime.today())
-
-if data > datetime.today().date():
-    st.error("Não podes escolher uma data futura")
-    st.stop()
-
-if st.button("Adicionar"):
-    guardar({
-        "Pessoa": pessoa,
-        "Tipo": tipo,
-        "Categoria": categoria,
-        "Descrição": descricao,
-        "Valor": valor,
-        "Data": data
-    })
-
-    st.cache_data.clear()
-    st.success("Adicionado com sucesso")
-    st.rerun()
-
-# =========================
-# 🗑 ELIMINAR
-# =========================
-st.markdown("---")
-st.subheader("🗑 Eliminar registos")
-
-for _, row in df.iterrows():
-
-    c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
-
-    c1.write(row["Pessoa"])
-    c2.write(row["Tipo"])
-    c3.write(row["Categoria"])
-    c4.write(row["Valor"])
-
-    if c5.button("❌", key=f"del_{row['sheet_row']}"):
-        eliminar_linha(row["sheet_row"])
-        st.cache_data.clear()
-        st.success("Eliminado")
-        st.rerun()
