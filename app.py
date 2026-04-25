@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -47,6 +48,9 @@ def load_data():
     df["Mês"] = pd.to_numeric(df["Mês"], errors="coerce").fillna(0).astype(int)
     df["Ano"] = pd.to_numeric(df["Ano"], errors="coerce").fillna(0).astype(int)
 
+    # converter data
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
     return df
 
 # =========================
@@ -65,6 +69,28 @@ def guardar(d):
     ])
 
 df = load_data()
+
+# =========================
+# FILTRO TEMPORAL
+# =========================
+st.sidebar.subheader("📅 Filtros")
+
+if not df.empty:
+    meses = sorted(df["Mês"].unique())
+    anos = sorted(df["Ano"].unique())
+
+    mes_sel = st.sidebar.selectbox("Mês", ["Todos"] + list(meses))
+    ano_sel = st.sidebar.selectbox("Ano", ["Todos"] + list(anos))
+
+    df_view = df.copy()
+
+    if mes_sel != "Todos":
+        df_view = df_view[df_view["Mês"] == mes_sel]
+
+    if ano_sel != "Todos":
+        df_view = df_view[df_view["Ano"] == ano_sel]
+else:
+    df_view = df
 
 # =========================
 # NOVO REGISTO
@@ -108,108 +134,68 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# EDITAR / APAGAR
+# DASHBOARD PRINCIPAL
 # =========================
-st.subheader("🗑️ Editar / Eliminar")
+if not df_view.empty:
 
-if not df.empty:
-
-    raw = sheet.get_all_values()
-    rows = raw[1:]
-
-    data = []
-    for i, r in enumerate(rows, start=2):
-        data.append({
-            "linha": i,
-            "Pessoa": r[0],
-            "Tipo": r[1],
-            "Categoria": r[2],
-            "Descrição": r[3],
-            "Valor": float(r[4]) if r[4] else 0,
-            "Data": r[5]
-        })
-
-    df_edit = pd.DataFrame(data)
-
-    idx = st.selectbox("Seleciona registo", df_edit.index)
-
-    row = df_edit.loc[idx]
-    linha = int(row["linha"])
-
-    if st.checkbox("Confirmar apagar", key=f"del_{linha}"):
-        if st.button("Apagar", key=f"btn_{linha}"):
-            sheet.delete_rows(linha)
-            st.success("Apagado")
-            st.rerun()
-
-    st.markdown("---")
-    st.subheader("✏️ Editar")
-
-    pessoa_e = st.selectbox(
-        "Pessoa",
-        ["Ruben", "Gabi"],
-        index=["Ruben","Gabi"].index(row["Pessoa"]),
-        key=f"p_{linha}"
-    )
-
-    tipo_e = st.selectbox(
-        "Tipo",
-        ["Salário","Subsídio Alimentação","Despesa"],
-        index=["Salário","Subsídio Alimentação","Despesa"].index(row["Tipo"]),
-        key=f"t_{linha}"
-    )
-
-    categoria_e = row["Categoria"]
-    descricao_e = row["Descrição"]
-
-    if tipo_e == "Despesa":
-        categoria_e = st.selectbox(
-            "Categoria",
-            ["Renda","Água","Luz","Vodafone","Alimentação","Gasolina","Outros"],
-            key=f"c_{linha}"
-        )
-
-        if categoria_e == "Outros":
-            descricao_e = st.text_input("Descrição", value=row["Descrição"], key=f"d_{linha}")
-
-    valor_e = st.number_input("Valor", value=float(row["Valor"]), key=f"v_{linha}")
-
-    if st.button("Guardar alterações", key=f"s_{linha}"):
-        sheet.update(f"A{linha}:H{linha}", [[
-            pessoa_e,
-            tipo_e,
-            categoria_e,
-            descricao_e,
-            valor_e,
-            row["Data"],
-            0,
-            0
-        ]])
-        st.success("Atualizado")
-        st.rerun()
-
-# =========================
-# DASHBOARD
-# =========================
-if not df.empty:
-
-    receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
-    despesas = df[df["Tipo"]=="Despesa"]["Valor"].sum()
+    receitas = df_view[df_view["Tipo"].isin(["Salário", "Subsídio Alimentação"])]["Valor"].sum()
+    despesas = df_view[df_view["Tipo"] == "Despesa"]["Valor"].sum()
     saldo = receitas - despesas
 
-    c1,c2,c3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
     c1.metric("Receitas", f"€ {receitas:.2f}")
     c2.metric("Despesas", f"€ {despesas:.2f}")
     c3.metric("Saldo", f"€ {saldo:.2f}")
 
-    st.subheader("📊 Categorias")
-    cat = df[df["Tipo"]=="Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
+    # =========================
+    # ALERTAS INTELIGENTES
+    # =========================
+    st.subheader("⚠️ Alertas")
 
-    if not cat.empty:
-        st.plotly_chart(px.bar(cat, x="Categoria", y="Valor"), use_container_width=True)
+    if despesas > receitas:
+        st.error("Estás a gastar mais do que estás a receber!")
+
+    if despesas > receitas * 0.8:
+        st.warning("As tuas despesas estão muito perto das receitas")
+
+    if df_view[df_view["Tipo"]=="Despesa"]["Valor"].sum() > 1000:
+        st.warning("Gastos elevados este período")
 
     # =========================
-    # METAS EDITÁVEIS (CORRETO)
+    # EVOLUÇÃO SALDO (GRÁFICO REAL)
+    # =========================
+    st.subheader("📈 Evolução do saldo")
+
+    temp = df_view.copy()
+
+    temp["Movimento"] = temp.apply(
+        lambda x: x["Valor"] if x["Tipo"] != "Despesa" else -x["Valor"],
+        axis=1
+    )
+
+    temp = temp.sort_values("Data")
+    temp["Saldo acumulado"] = temp["Movimento"].cumsum()
+
+    st.plotly_chart(
+        px.line(temp, x="Data", y="Saldo acumulado"),
+        use_container_width=True
+    )
+
+    # =========================
+    # TOP CATEGORIAS
+    # =========================
+    st.subheader("🔥 Top categorias")
+
+    cat = df_view[df_view["Tipo"]=="Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
+
+    if not cat.empty:
+        st.plotly_chart(
+            px.bar(cat.sort_values("Valor", ascending=False), x="Categoria", y="Valor"),
+            use_container_width=True
+        )
+
+    # =========================
+    # METAS INTELIGENTES
     # =========================
     st.subheader("🎯 Metas")
 
@@ -222,32 +208,43 @@ if not df.empty:
 
     novas = []
 
-    for i,m in enumerate(st.session_state.metas):
+    for i, m in enumerate(st.session_state.metas):
 
-        col1,col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
         with col1:
-            nome = st.text_input(
-                " ",
-                value=m["nome"],
-                key=f"mn_{i}",
-                label_visibility="collapsed"
-            )
+            nome = st.text_input("", value=m["nome"], key=f"mn_{i}", label_visibility="collapsed")
 
         with col2:
-            val = st.number_input(
-                "Valor",
-                value=float(m["valor"]),
-                key=f"mv_{i}"
-            )
+            val = st.number_input("Meta", value=float(m["valor"]), key=f"mv_{i}")
 
-        novas.append({"nome":nome,"valor":val})
+        progresso = max(0, min(saldo / val, 1)) if val > 0 else 0
+
+        if progresso < 0.3:
+            st.error(f"{nome} - Fraco progresso")
+        elif progresso < 0.7:
+            st.warning(f"{nome} - Médio progresso")
+        else:
+            st.success(f"{nome} - Bom progresso")
+
+        st.progress(progresso)
+
+        novas.append({"nome": nome, "valor": val})
 
     st.session_state.metas = novas
 
     if st.button("➕ Nova meta"):
         st.session_state.metas.append({"nome":"Nova meta","valor":1000})
         st.rerun()
+
+    # =========================
+    # BACKUP
+    # =========================
+    st.download_button(
+        "Backup CSV",
+        df.to_csv(index=False).encode(),
+        "backup.csv"
+    )
 
 else:
     st.info("Sem dados")
