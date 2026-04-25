@@ -20,23 +20,29 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds = Credentials.from_service_account_info(
-    st.secrets["google_service_account"],
-    scopes=scope
-)
-
-client = gspread.authorize(creds)
-
-# 🔥 FIX DEFINITIVO (mais estável que open_by_url)
 try:
-    spreadsheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME")
-    sheet = spreadsheet.worksheet("Sheet1")
+    creds = Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
+        scopes=scope
+    )
+
+    client = gspread.authorize(creds)
+
+    # 🔥 MAIS SEGURO: abre por key
+    spreadsheet = client.open_by_key(
+        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+    )
+
+    # 🔥 pega primeira worksheet automaticamente (evita erro de nome)
+    sheet = spreadsheet.get_worksheet(0)
+
 except Exception as e:
     st.error("❌ Erro ao ligar ao Google Sheets")
+    st.error(str(e))  # 👈 agora vais ver o erro real
     st.stop()
 
 # =========================
-# LOAD DATA (ROBUSTO)
+# LOAD DATA
 # =========================
 def normalize_person(x):
     x = str(x).strip().lower()
@@ -61,8 +67,9 @@ def load_data():
 
         return df
 
-    except Exception:
-        st.error("❌ Falha a carregar dados da Google Sheet")
+    except Exception as e:
+        st.error("❌ Erro ao carregar dados")
+        st.error(str(e))
         return pd.DataFrame()
 
 # =========================
@@ -83,10 +90,8 @@ df = load_data()
 # =========================
 # MODO
 # =========================
-st.sidebar.header("👁️ Modo")
-
 modo = st.sidebar.selectbox(
-    "Visualização",
+    "Modo",
     ["Casal", "Ruben", "Gabi"]
 )
 
@@ -99,35 +104,30 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# NOVO REGISTO (BLOQUEIO POR MODO)
+# ADICIONAR
 # =========================
 if modo != "Casal":
 
     st.subheader("➕ Novo registo")
 
-    col1, col2 = st.columns(2)
+    pessoa = modo
 
-    with col1:
+    tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
-        pessoa = modo  # 🔥 bloqueado ao modo
+    categoria = ""
+    descricao = ""
 
-        tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
+    if tipo == "Despesa":
+        categoria = st.selectbox(
+            "Categoria",
+            ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"]
+        )
 
-        categoria = ""
-        descricao = ""
+        if categoria == "Outros":
+            descricao = st.text_input("Descrição")
 
-        if tipo == "Despesa":
-            categoria = st.selectbox(
-                "Categoria",
-                ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"]
-            )
-
-            if categoria == "Outros":
-                descricao = st.text_input("Descrição")
-
-    with col2:
-        valor = st.number_input("Valor (€)", min_value=0.0)
-        data = st.date_input("Data", datetime.today())
+    valor = st.number_input("Valor (€)", min_value=0.0)
+    data = st.date_input("Data", datetime.today())
 
     if st.button("Adicionar"):
         guardar({
@@ -156,58 +156,6 @@ if not df_view.empty:
     c1.metric("Receitas", f"€ {receitas:.2f}")
     c2.metric("Despesas", f"€ {despesas:.2f}")
     c3.metric("Saldo", f"€ {saldo:.2f}")
-
-    st.markdown("---")
-
-    # =========================
-    # GASTOS POR CATEGORIA
-    # =========================
-    st.subheader("📉 Gastos")
-
-    gastos = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
-
-    if not gastos.empty:
-        for _, row in gastos.iterrows():
-            st.write(f"💳 {row['Categoria']} → € {row['Valor']:.2f}")
-
-    st.markdown("---")
-
-    # =========================
-    # ELIMINAR
-    # =========================
-    if modo != "Casal":
-
-        st.subheader("🗑️ Eliminar registo")
-
-        try:
-            raw = sheet.get_all_values()
-            rows = raw[1:]
-
-            data = []
-            for i, r in enumerate(rows, start=2):
-                if len(r) >= 5:
-                    data.append({
-                        "linha": i,
-                        "Pessoa": r[0],
-                        "Valor": r[4]
-                    })
-
-            df_del = pd.DataFrame(data)
-
-            if not df_del.empty:
-
-                idx = st.selectbox("Seleciona registo", df_del.index)
-                linha = int(df_del.loc[idx, "linha"])
-
-                confirmar = st.checkbox("Confirmo eliminação")
-
-                if confirmar and st.button("Eliminar"):
-                    sheet.delete_rows(linha)
-                    st.success("Eliminado")
-                    st.rerun()
-
-        except Exception:
-            st.warning("Não foi possível carregar registos para eliminar")
 
 else:
     st.info("Sem dados ainda")
