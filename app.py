@@ -138,7 +138,7 @@ with st.sidebar.expander("📋 Ver categorias"):
     st.write(categories)
 
 # =========================
-# CASAL (COM INSIGHT RESTAURADO)
+# CASAL + ALERTAS PRO
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
@@ -181,24 +181,43 @@ if modo == "Casal 👨‍❤️‍👩":
         st.dataframe(despesas, use_container_width=True)
 
         # =========================
-        # 🧠 INSIGHT RESTAURADO (IMPORTANTE)
+        # 🧠 ANÁLISE BASE
         # =========================
         st.markdown("### 🧠 Análise do ciclo")
 
         if total_receitas == 0 and total_despesas == 0:
             st.info("Sem dados suficientes para análise neste ciclo.")
         else:
+            taxa = (saldo / total_receitas * 100) if total_receitas > 0 else 0
+
             if saldo < 0:
                 st.error("⚠️ Estás em défice neste ciclo.")
+            elif taxa < 10:
+                st.warning("⚠️ Poupança baixa neste ciclo.")
+            elif taxa < 25:
+                st.info("📊 Estás equilibrado.")
             else:
-                taxa = (saldo / total_receitas * 100) if total_receitas > 0 else 0
+                st.success("🟢 Excelente controlo financeiro!")
 
-                if taxa < 10:
-                    st.warning("⚠️ Poupança baixa neste ciclo.")
-                elif taxa < 25:
-                    st.info("📊 Estás equilibrado.")
-                else:
-                    st.success("🟢 Excelente controlo financeiro!")
+        # =========================
+        # 🚨 ALERTAS INTELIGENTES PRO
+        # =========================
+        st.markdown("### 🚨 Alertas Inteligentes PRO")
+
+        if total_despesas > total_receitas:
+            st.error("🚨 Estás a gastar mais do que ganhas!")
+
+        elif total_despesas > 0.8 * total_receitas:
+            st.warning("⚠️ Estás perto do limite do teu rendimento")
+
+        if not despesas.empty:
+            cat_sum = despesas.groupby("Categoria")["Valor"].sum()
+            if not cat_sum.empty:
+                if (cat_sum.max() / total_despesas) > 0.4:
+                    st.warning("⚠️ Uma categoria está a dominar os gastos")
+
+        if total_receitas > 0 and saldo > 0 and (saldo / total_receitas) > 0.25:
+            st.success("🟢 Excelente controlo financeiro!")
 
         st.markdown("#### 🗑 Eliminar registos")
 
@@ -225,7 +244,7 @@ if modo == "Casal 👨‍❤️‍👩":
     st.stop()
 
 # =========================
-# METAS (SEM TABELA VAZIA)
+# METAS (SEM EMPTY TABLE)
 # =========================
 if modo == "Metas 🎯":
 
