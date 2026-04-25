@@ -90,7 +90,21 @@ descricao = ""
 
 with col1:
     if tipo == "Despesa":
+        categoria = st.selectbox(
+            "Categoria",
+            [
+                "Renda",
+                "Água",
+                "Luz",
+                "Vodafone",
+                "Alimentação",
+                "Gasolina",
+                "Outros"
+            ]
+        )
 
+        if categoria == "Outros":
+            descricao = st.text_input("Descrição")
 
 # =========================
 # ADICIONAR
