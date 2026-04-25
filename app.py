@@ -33,19 +33,34 @@ sheet = client.open_by_url(
 ).sheet1
 
 # =========================
-# LOAD DATA
+# LOAD DATA (ROBUSTO)
 # =========================
 def load_data():
-    data = sheet.get_all_records()
-    df = pd.DataFrame(data)
+    raw = sheet.get_all_values()
 
-    if not df.empty:
-        df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-        df["Mês"] = pd.to_numeric(df["Mês"], errors="coerce").fillna(0).astype(int)
-        df["Ano"] = pd.to_numeric(df["Ano"], errors="coerce").fillna(0).astype(int)
+    if not raw or len(raw) < 2:
+        return pd.DataFrame()
 
-    return df
+    headers = [h.strip() for h in raw[0]]
+    data = pd.DataFrame(raw[1:], columns=headers)
 
+    # limpar headers (espaços + caracteres invisíveis)
+    data.columns = data.columns.str.strip().str.replace("\xa0", "", regex=True)
+
+    # garantir colunas obrigatórias
+    required = ["Valor", "Mês", "Ano"]
+
+    for col in required:
+        if col not in data.columns:
+            st.error(f"Coluna em falta no Google Sheets: {col}")
+            return pd.DataFrame()
+
+    # conversões seguras
+    data["Valor"] = pd.to_numeric(data["Valor"], errors="coerce").fillna(0)
+    data["Mês"] = pd.to_numeric(data["Mês"], errors="coerce").fillna(0).astype(int)
+    data["Ano"] = pd.to_numeric(data["Ano"], errors="coerce").fillna(0).astype(int)
+
+    return data
 
 # =========================
 # SAVE DATA
@@ -62,7 +77,6 @@ def guardar(d):
         int(d["Ano"])
     ])
 
-
 # =========================
 # NOVO REGISTO
 # =========================
@@ -72,23 +86,11 @@ col1, col2 = st.columns(2)
 
 with col1:
     pessoa = st.selectbox("Pessoa", ["Ruben", "Gabi"])
-    tipo = st.selectbox(
-        "Tipo",
-        ["Salário", "Subsídio Alimentação", "Despesa"]
-    )
+    tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
-with col2:
-    valor = st.number_input(
-        "Valor (€)",
-        min_value=0.0,
-        step=10.0
-    )
-    data = st.date_input("Data", datetime.today())
+    categoria = ""
+    descricao = ""
 
-categoria = ""
-descricao = ""
-
-with col1:
     if tipo == "Despesa":
         categoria = st.selectbox(
             "Categoria",
@@ -105,6 +107,10 @@ with col1:
 
         if categoria == "Outros":
             descricao = st.text_input("Descrição")
+
+with col2:
+    valor = st.number_input("Valor (€)", min_value=0.0, step=10.0)
+    data = st.date_input("Data", datetime.today())
 
 # =========================
 # ADICIONAR
@@ -138,7 +144,6 @@ if st.button("Adicionar"):
     st.success("Guardado com sucesso ☁️")
     st.rerun()
 
-
 # =========================
 # LOAD DATA
 # =========================
@@ -162,11 +167,7 @@ if not df.empty:
     with col_f2:
         ano_filtro = st.selectbox("Ano", anos)
 
-    df = df[
-        (df["Mês"] == mes_filtro) &
-        (df["Ano"] == ano_filtro)
-    ]
-
+    df = df[(df["Mês"] == mes_filtro) & (df["Ano"] == ano_filtro)]
 
 # =========================
 # DASHBOARD
@@ -175,13 +176,10 @@ if not df.empty:
 
     st.subheader("📊 Visão Geral")
 
-    receitas = df[
-        df["Tipo"].isin(["Salário", "Subsídio Alimentação"])
-    ]["Valor"].sum()
+    receitas = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
+    receitas = receitas["Valor"].sum()
 
-    despesas = df[
-        df["Tipo"] == "Despesa"
-    ]["Valor"].sum()
+    despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
 
     saldo = receitas - despesas
 
@@ -196,13 +194,8 @@ if not df.empty:
     with c3:
         st.metric("Saldo", f"€ {saldo:.2f}")
 
-
-    # =========================
-    # ALERTAS
-    # =========================
     if despesas > receitas:
         st.warning("⚠️ As despesas ultrapassaram as receitas este mês.")
-
 
     # =========================
     # DESPESAS POR CATEGORIA
@@ -212,42 +205,21 @@ if not df.empty:
     if not despesas_df.empty:
         st.subheader("🧾 Despesas por Categoria")
 
-        categoria_total = despesas_df.groupby("Categoria")["Valor"] \
-            .sum() \
-            .reset_index()
+        categoria_total = despesas_df.groupby("Categoria")["Valor"].sum().reset_index()
 
-        fig_cat = px.pie(
-            categoria_total,
-            names="Categoria",
-            values="Valor"
-        )
+        fig = px.pie(categoria_total, names="Categoria", values="Valor")
+        st.plotly_chart(fig, use_container_width=True)
 
-        st.plotly_chart(fig_cat, use_container_width=True)
-
-        top = categoria_total.sort_values(
-            "Valor",
-            ascending=False
-        ).iloc[0]
-
-        st.info(
-            f"Maior gasto: {top['Categoria']} → € {top['Valor']:.2f}"
-        )
-
+        top = categoria_total.sort_values("Valor", ascending=False).iloc[0]
+        st.info(f"Maior gasto: {top['Categoria']} → € {top['Valor']:.2f}")
 
     # =========================
     # RUBEN VS GABI
     # =========================
     st.subheader("⚖️ Ruben vs Gabi")
 
-    fig = px.bar(
-        df.groupby("Pessoa")["Valor"].sum().reset_index(),
-        x="Pessoa",
-        y="Valor",
-        text="Valor"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
+    fig2 = px.bar(df.groupby("Pessoa")["Valor"].sum().reset_index(), x="Pessoa", y="Valor", text="Valor")
+    st.plotly_chart(fig2, use_container_width=True)
 
     # =========================
     # META FINANCEIRA
@@ -261,16 +233,15 @@ if not df.empty:
     st.write(f"Objetivo: € {meta:.2f}")
     st.write(f"Atual: € {saldo:.2f}")
 
-
     # =========================
-    # BACKUP CSV
+    # BACKUP
     # =========================
     st.subheader("⬇️ Backup")
 
     csv = df.to_csv(index=False).encode("utf-8")
 
     st.download_button(
-        label="Exportar CSV",
+        "Exportar CSV",
         data=csv,
         file_name="backup_financas.csv",
         mime="text/csv"
