@@ -12,7 +12,7 @@ st.set_page_config(page_title="Rubi&Gabi", layout="wide")
 st.title("💰 Controlo Financeiro")
 
 # =========================
-# GOOGLE SHEETS (FIX DEFINITIVO)
+# GOOGLE SHEETS (ROBUSTO)
 # =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -27,10 +27,13 @@ creds = Credentials.from_service_account_info(
 
 client = gspread.authorize(creds)
 
-# 🔥 FIX IMPORTANTE: open_by_key (mais estável)
-sheet = client.open_by_key(
-    "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-).sheet1
+# 🔥 FIX DEFINITIVO (mais estável que open_by_url)
+try:
+    spreadsheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME")
+    sheet = spreadsheet.worksheet("Sheet1")
+except Exception as e:
+    st.error("❌ Erro ao ligar ao Google Sheets")
+    st.stop()
 
 # =========================
 # LOAD DATA (ROBUSTO)
@@ -44,18 +47,23 @@ def normalize_person(x):
     return x.capitalize()
 
 def load_data():
-    raw = sheet.get_all_values()
+    try:
+        raw = sheet.get_all_values()
 
-    if not raw or len(raw) < 2:
+        if not raw or len(raw) < 2:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(raw[1:], columns=raw[0])
+        df.columns = df.columns.str.strip()
+
+        df["Pessoa"] = df["Pessoa"].apply(normalize_person)
+        df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
+
+        return df
+
+    except Exception:
+        st.error("❌ Falha a carregar dados da Google Sheet")
         return pd.DataFrame()
-
-    df = pd.DataFrame(raw[1:], columns=raw[0])
-    df.columns = df.columns.str.strip()
-
-    df["Pessoa"] = df["Pessoa"].apply(normalize_person)
-    df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-
-    return df
 
 # =========================
 # SAVE
@@ -91,7 +99,7 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# NOVO REGISTO (BLOQUEADO POR MODO)
+# NOVO REGISTO (BLOQUEIO POR MODO)
 # =========================
 if modo != "Casal":
 
@@ -101,8 +109,7 @@ if modo != "Casal":
 
     with col1:
 
-        # 🔥 FIX: pessoa bloqueada automaticamente
-        pessoa = modo
+        pessoa = modo  # 🔥 bloqueado ao modo
 
         tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
@@ -166,38 +173,41 @@ if not df_view.empty:
     st.markdown("---")
 
     # =========================
-    # ELIMINAR (SÓ R E G)
+    # ELIMINAR
     # =========================
     if modo != "Casal":
 
         st.subheader("🗑️ Eliminar registo")
 
-        raw = sheet.get_all_values()
-        rows = raw[1:]
+        try:
+            raw = sheet.get_all_values()
+            rows = raw[1:]
 
-        data = []
-        for i, r in enumerate(rows, start=2):
-            if len(r) >= 5:
-                data.append({
-                    "linha": i,
-                    "Pessoa": r[0],
-                    "Valor": r[4]
-                })
+            data = []
+            for i, r in enumerate(rows, start=2):
+                if len(r) >= 5:
+                    data.append({
+                        "linha": i,
+                        "Pessoa": r[0],
+                        "Valor": r[4]
+                    })
 
-        df_del = pd.DataFrame(data)
+            df_del = pd.DataFrame(data)
 
-        if not df_del.empty:
+            if not df_del.empty:
 
-            idx = st.selectbox("Seleciona registo", df_del.index)
-            linha = int(df_del.loc[idx, "linha"])
+                idx = st.selectbox("Seleciona registo", df_del.index)
+                linha = int(df_del.loc[idx, "linha"])
 
-            confirmar = st.checkbox("Confirmo eliminação")
+                confirmar = st.checkbox("Confirmo eliminação")
 
-            if confirmar:
-                if st.button("Eliminar"):
+                if confirmar and st.button("Eliminar"):
                     sheet.delete_rows(linha)
                     st.success("Eliminado")
                     st.rerun()
+
+        except Exception:
+            st.warning("Não foi possível carregar registos para eliminar")
 
 else:
     st.info("Sem dados ainda")
