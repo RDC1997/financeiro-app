@@ -12,7 +12,7 @@ st.set_page_config(page_title="Rubi&Gabi", layout="wide")
 st.title("💰 Controlo Financeiro")
 
 # =========================
-# GOOGLE SHEETS (ROBUSTO)
+# GOOGLE SHEETS
 # =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -27,11 +27,7 @@ try:
     )
 
     client = gspread.authorize(creds)
-
-    spreadsheet = client.open_by_key(
-        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-    )
-
+    spreadsheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME")
     sheet = spreadsheet.get_worksheet(0)
 
 except Exception as e:
@@ -82,7 +78,7 @@ df = load_data()
 # =========================
 # MODO
 # =========================
-modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
+modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"], key="modo_principal")
 
 df_view = df.copy()
 
@@ -93,7 +89,7 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# ADICIONAR (BLOQUEADO POR MODO)
+# ADICIONAR (SÓ R E G)
 # =========================
 if modo != "Casal":
 
@@ -101,7 +97,11 @@ if modo != "Casal":
 
     pessoa = modo
 
-    tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
+    tipo = st.selectbox(
+        "Tipo",
+        ["Salário", "Subsídio Alimentação", "Despesa"],
+        key="tipo_add"
+    )
 
     categoria = ""
     descricao = ""
@@ -109,16 +109,17 @@ if modo != "Casal":
     if tipo == "Despesa":
         categoria = st.selectbox(
             "Categoria",
-            ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"]
+            ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"],
+            key="cat_add"
         )
 
         if categoria == "Outros":
-            descricao = st.text_input("Descrição")
+            descricao = st.text_input("Descrição", key="desc_add")
 
-    valor = st.number_input("Valor (€)", min_value=0.0)
-    data = st.date_input("Data", datetime.today())
+    valor = st.number_input("Valor (€)", min_value=0.0, key="valor_add")
+    data = st.date_input("Data", datetime.today(), key="data_add")
 
-    if st.button("Adicionar"):
+    if st.button("Adicionar", key="btn_add"):
         guardar({
             "Pessoa": pessoa,
             "Tipo": tipo,
@@ -131,7 +132,7 @@ if modo != "Casal":
         st.rerun()
 
 # =========================
-# RESUMO
+# RESUMO (TODOS = SÓ LEITURA)
 # =========================
 if not df_view.empty:
 
@@ -149,68 +150,76 @@ if not df_view.empty:
     st.markdown("---")
 
     # =========================
-    # LISTA DE REGISTOS (EDITAR + ELIMINAR)
+    # EDITAR + ELIMINAR (SÓ R E G)
     # =========================
-    st.subheader("📋 Registos")
+    if modo != "Casal":
 
-    raw = sheet.get_all_values()
-    rows = raw[1:]
+        st.subheader("📋 Editar / Eliminar")
 
-    data = []
-    for i, r in enumerate(rows, start=2):
-        if len(r) >= 6:
-            data.append({
-                "linha": i,
-                "Pessoa": r[0],
-                "Tipo": r[1],
-                "Categoria": r[2],
-                "Descricao": r[3],
-                "Valor": r[4],
-                "Data": r[5]
-            })
+        raw = sheet.get_all_values()
+        rows = raw[1:]
 
-    df_edit = pd.DataFrame(data)
+        data = []
+        for i, r in enumerate(rows, start=2):
+            if len(r) >= 6:
+                data.append({
+                    "linha": i,
+                    "Pessoa": r[0],
+                    "Tipo": r[1],
+                    "Categoria": r[2],
+                    "Descricao": r[3],
+                    "Valor": r[4],
+                    "Data": r[5]
+                })
 
-    if not df_edit.empty:
+        df_edit = pd.DataFrame(data)
 
-        idx = st.selectbox(
-            "Seleciona registo",
-            df_edit.index,
-            format_func=lambda i: f"{df_edit.loc[i,'Pessoa']} | {df_edit.loc[i,'Tipo']} | €{df_edit.loc[i,'Valor']}"
-        )
+        if not df_edit.empty:
 
-        row = df_edit.loc[idx]
-        linha = int(row["linha"])
+            idx = st.selectbox(
+                "Seleciona registo",
+                df_edit.index,
+                key="select_reg"
+            )
 
-        st.markdown("### ✏️ Editar")
+            row = df_edit.loc[idx]
+            linha = int(row["linha"])
 
-        new_valor = st.number_input("Valor", value=float(row["Valor"]))
-        new_tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"], index=0)
-        new_categoria = st.text_input("Categoria", value=row["Categoria"])
-        new_descricao = st.text_input("Descrição", value=row["Descricao"])
+            st.markdown("### ✏️ Editar")
 
-        col1, col2 = st.columns(2)
+            new_tipo = st.selectbox(
+                "Tipo",
+                ["Salário", "Subsídio Alimentação", "Despesa"],
+                index=0,
+                key="tipo_edit"
+            )
 
-        with col1:
-            if st.button("💾 Guardar alterações"):
-                sheet.update(f"A{linha}:F{linha}", [[
-                    row["Pessoa"],
-                    new_tipo,
-                    new_categoria,
-                    new_descricao,
-                    new_valor,
-                    row["Data"]
-                ]])
-                st.success("Atualizado")
-                st.rerun()
+            new_categoria = st.text_input("Categoria", value=row["Categoria"], key="cat_edit")
+            new_descricao = st.text_input("Descrição", value=row["Descricao"], key="desc_edit")
+            new_valor = st.number_input("Valor", value=float(row["Valor"]), key="valor_edit")
 
-        with col2:
-            confirmar = st.checkbox("Confirmo eliminação")
+            col1, col2 = st.columns(2)
 
-            if confirmar and st.button("🗑️ Eliminar"):
-                sheet.delete_rows(linha)
-                st.success("Eliminado")
-                st.rerun()
+            with col1:
+                if st.button("💾 Guardar", key="save_edit"):
+                    sheet.update(f"A{linha}:F{linha}", [[
+                        row["Pessoa"],
+                        new_tipo,
+                        new_categoria,
+                        new_descricao,
+                        new_valor,
+                        row["Data"]
+                    ]])
+                    st.success("Atualizado")
+                    st.rerun()
+
+            with col2:
+                confirmar = st.checkbox("Confirmo eliminação", key="confirm_del")
+
+                if confirmar and st.button("🗑️ Eliminar", key="del_btn"):
+                    sheet.delete_rows(linha)
+                    st.success("Eliminado")
+                    st.rerun()
 
 else:
     st.info("Sem dados ainda")
