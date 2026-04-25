@@ -49,7 +49,7 @@ def load_data():
     required = ["Valor", "Mês", "Ano"]
     for col in required:
         if col not in df.columns:
-            st.error(f"Coluna em falta no Google Sheets: {col}")
+            st.error(f"Coluna em falta: {col}")
             return pd.DataFrame()
 
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
@@ -159,28 +159,25 @@ if not df.empty:
     row = df_edit.loc[escolha]
     linha = int(row["linha"])
 
-    confirm = st.checkbox("Confirmo que quero apagar", key=f"del_{linha}")
+    confirm = st.checkbox("Confirmo apagar", key=f"del_{linha}")
 
-    if confirm and st.button("🗑️ Apagar", key=f"btn_del_{linha}"):
+    if confirm and st.button("Apagar", key=f"btn_{linha}"):
         sheet.delete_rows(linha)
         st.success("Apagado")
         st.rerun()
 
     st.markdown("---")
-    st.subheader("✏️ Editar registo")
+    st.subheader("✏️ Editar")
 
-    pessoa_e = st.selectbox(
-        "Pessoa",
-        ["Ruben", "Gabi"],
-        index=["Ruben", "Gabi"].index(row["Pessoa"]),
-        key=f"pessoa_{linha}"
+    pessoa_e = st.selectbox("Pessoa", ["Ruben", "Gabi"],
+        index=["Ruben","Gabi"].index(row["Pessoa"]),
+        key=f"p_{linha}"
     )
 
-    tipo_e = st.selectbox(
-        "Tipo",
-        ["Salário", "Subsídio Alimentação", "Despesa"],
-        index=["Salário", "Subsídio Alimentação", "Despesa"].index(row["Tipo"]),
-        key=f"tipo_{linha}"
+    tipo_e = st.selectbox("Tipo",
+        ["Salário","Subsídio Alimentação","Despesa"],
+        index=["Salário","Subsídio Alimentação","Despesa"].index(row["Tipo"]),
+        key=f"t_{linha}"
     )
 
     categoria_e = row["Categoria"]
@@ -189,20 +186,16 @@ if not df.empty:
     if tipo_e == "Despesa":
         categoria_e = st.selectbox(
             "Categoria",
-            ["Renda", "Água", "Luz", "Vodafone", "Alimentação", "Gasolina", "Outros"],
-            key=f"cat_{linha}"
+            ["Renda","Água","Luz","Vodafone","Alimentação","Gasolina","Outros"],
+            key=f"c_{linha}"
         )
 
         if categoria_e == "Outros":
-            descricao_e = st.text_input("Descrição", value=row["Descrição"], key=f"desc_{linha}")
+            descricao_e = st.text_input("Descrição", value=row["Descrição"], key=f"d_{linha}")
 
-    valor_e = st.number_input(
-        "Valor",
-        value=float(row["Valor"]),
-        key=f"val_{linha}"
-    )
+    valor_e = st.number_input("Valor", value=float(row["Valor"]), key=f"v_{linha}")
 
-    if st.button("💾 Guardar alterações", key=f"save_{linha}"):
+    if st.button("Guardar alterações", key=f"s_{linha}"):
         sheet.update(f"A{linha}:H{linha}", [[
             pessoa_e,
             tipo_e,
@@ -210,10 +203,9 @@ if not df.empty:
             descricao_e,
             valor_e,
             row["Data"],
-            row.get("Mês", 0),
-            row.get("Ano", 0)
+            0,
+            0
         ]])
-
         st.success("Atualizado")
         st.rerun()
 
@@ -225,44 +217,54 @@ else:
 # =========================
 if not df.empty:
 
-    receitas = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
-    receitas = receitas["Valor"].sum()
-
-    despesas = df[df["Tipo"] == "Despesa"]["Valor"].sum()
-
+    receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
+    despesas = df[df["Tipo"]=="Despesa"]["Valor"].sum()
     saldo = receitas - despesas
 
-    c1, c2, c3 = st.columns(3)
-
+    c1,c2,c3 = st.columns(3)
     c1.metric("Receitas", f"€ {receitas:.2f}")
     c2.metric("Despesas", f"€ {despesas:.2f}")
     c3.metric("Saldo", f"€ {saldo:.2f}")
 
     st.subheader("📊 Categorias")
-
-    cat = df[df["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
+    cat = df[df["Tipo"]=="Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
 
     if not cat.empty:
         st.plotly_chart(px.bar(cat, x="Categoria", y="Valor"), use_container_width=True)
 
+    # =========================
+    # METAS EDITÁVEIS (NOMES)
+    # =========================
     st.subheader("🎯 Metas")
 
     if "metas" not in st.session_state:
-        st.session_state.metas = {
-            "Casa": 10000,
-            "Carro": 5000,
-            "Poupança": 2000
-        }
+        st.session_state.metas = [
+            {"nome":"Casa","valor":10000},
+            {"nome":"Carro","valor":5000},
+            {"nome":"Poupança","valor":2000}
+        ]
 
-    for k in st.session_state.metas:
-        st.session_state.metas[k] = st.number_input(
-            k,
-            value=float(st.session_state.metas[k]),
-            key=f"meta_{k}"
-        )
+    novas = []
 
-        prog = max(0, min(saldo / st.session_state.metas[k], 1)) if st.session_state.metas[k] > 0 else 0
+    for i,m in enumerate(st.session_state.metas):
+
+        col1,col2 = st.columns(2)
+
+        with col1:
+            nome = st.text_input("Nome", m["nome"], key=f"mn_{i}")
+        with col2:
+            val = st.number_input("Valor", value=float(m["valor"]), key=f"mv_{i}")
+
+        novas.append({"nome":nome,"valor":val})
+
+        prog = max(0,min(saldo/val,1)) if val>0 else 0
         st.progress(prog)
+
+    if st.button("Adicionar meta"):
+        st.session_state.metas.append({"nome":"Nova meta","valor":1000})
+        st.rerun()
+
+    st.session_state.metas = novas
 
     st.download_button("Backup CSV", df.to_csv(index=False).encode(), "backup.csv")
 
