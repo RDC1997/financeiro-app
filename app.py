@@ -49,10 +49,8 @@ def load_data():
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
 
-    # 🔥 DATA SEM HORA (CORREÇÃO)
+    # 📅 SEM HORA (CORRIGIDO)
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
-
-    df["sheet_row"] = df.index + 2
 
     return df
 
@@ -79,12 +77,14 @@ avatars = {
 # =========================
 # MODO
 # =========================
-modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi", "Todos"])
+modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 🟣 TODOS (SEPARADO POR PESSOA)
+# 🟢 CASAL (SEPARADO POR PESSOA)
 # =========================
-if modo == "Todos":
+if modo == "Casal":
+
+    st.subheader("📊 Visão Geral Casal")
 
     for pessoa in ["Ruben", "Gabi"]:
 
@@ -96,9 +96,10 @@ if modo == "Todos":
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
         # =========================
-        # RECEITAS
+        # 💰 RECEITAS
         # =========================
         st.markdown("### 💰 Receitas")
+
         if not receitas.empty:
             st.table(
                 receitas[["Tipo","Valor","Data"]]
@@ -107,9 +108,10 @@ if modo == "Todos":
             st.info("Sem receitas")
 
         # =========================
-        # DESPESAS
+        # 💸 DESPESAS
         # =========================
         st.markdown("### 💸 Despesas")
+
         if not despesas.empty:
 
             despesas = despesas.copy()
@@ -124,6 +126,7 @@ if modo == "Todos":
             st.table(
                 despesas[["Categoria","Valor","Data"]]
             )
+
         else:
             st.info("Sem despesas")
 
