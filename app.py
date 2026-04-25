@@ -32,15 +32,10 @@ sheet = client.open_by_url(
 ).sheet1
 
 # =========================
-# LOAD DATA (ROBUSTO A 100%)
+# LOAD DATA (ROBUSTO)
 # =========================
-def clean_person(x):
-    if pd.isna(x):
-        return ""
-    return str(x).strip().lower()
-
 def normalize_person(x):
-    x = clean_person(x)
+    x = str(x).strip().lower()
     if x == "ruben":
         return "Ruben"
     if x == "gabi":
@@ -56,34 +51,30 @@ def load_data():
     df = pd.DataFrame(raw[1:], columns=raw[0])
     df.columns = df.columns.str.strip()
 
-    # 🔥 CORREÇÃO DEFINITIVA
     df["Pessoa"] = df["Pessoa"].apply(normalize_person)
-
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-    df["Mês"] = pd.to_numeric(df["Mês"], errors="coerce").fillna(0).astype(int)
-    df["Ano"] = pd.to_numeric(df["Ano"], errors="coerce").fillna(0).astype(int)
 
     return df
 
 # =========================
-# SAVE (NORMALIZAÇÃO FORÇADA)
+# SAVE
 # =========================
 def guardar(d):
     sheet.append_row([
-        d["Pessoa"].strip().capitalize(),
+        d["Pessoa"],
         d["Tipo"],
         d["Categoria"],
         d["Descrição"],
         float(d["Valor"]),
         str(d["Data"]),
-        int(d["Mês"]),
-        int(d["Ano"])
+        0,
+        0
     ])
 
 df = load_data()
 
 # =========================
-# MODO VISUALIZAÇÃO
+# MODO
 # =========================
 st.sidebar.header("👁️ Modo")
 
@@ -101,14 +92,24 @@ if not df_view.empty:
         df_view = df_view[df_view["Pessoa"] == "Gabi"]
 
 # =========================
-# NOVO REGISTO
+# NOVO REGISTO (COM BLOQUEIO INTELIGENTE)
 # =========================
 st.subheader("➕ Novo registo")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    pessoa = st.selectbox("Pessoa", ["Ruben", "Gabi"])
+
+    # 🔥 REGRA IMPORTANTE
+    if modo == "Ruben":
+        pessoa = "Ruben"
+        st.info("Registo será automaticamente atribuído a Ruben")
+    elif modo == "Gabi":
+        pessoa = "Gabi"
+        st.info("Registo será automaticamente atribuído a Gabi")
+    else:
+        pessoa = st.selectbox("Pessoa", ["Ruben", "Gabi"])
+
     tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
     categoria = ""
@@ -134,11 +135,9 @@ if st.button("Adicionar"):
         "Categoria": categoria,
         "Descrição": descricao,
         "Valor": valor,
-        "Data": data,
-        "Mês": data.month,
-        "Ano": data.year
+        "Data": data
     })
-    st.success(f"Adicionado com sucesso ({pessoa})")
+    st.success("Adicionado com sucesso")
     st.rerun()
 
 # =========================
@@ -157,19 +156,53 @@ if not df_view.empty:
     c2.metric("Despesas", f"€ {despesas:.2f}")
     c3.metric("Saldo", f"€ {saldo:.2f}")
 
-    if saldo < 0:
-        st.error("⚠️ Gastos acima dos ganhos")
-    elif saldo < 200:
-        st.warning("⚠️ Saldo baixo")
-    else:
-        st.success("✔ Situação estável")
+    st.markdown("---")
+
+    # =========================
+    # GASTOS
+    # =========================
+    st.subheader("📉 Gastos")
+
+    gastos = df_view[df_view["Tipo"] == "Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
+
+    if not gastos.empty:
+        for _, row in gastos.iterrows():
+            st.write(f"💳 {row['Categoria']} → € {row['Valor']:.2f}")
 
     st.markdown("---")
 
     # =========================
-    # DEBUG (REMOVE DEPOIS SE QUISERES)
+    # ELIMINAR (ÚNICA AÇÃO)
     # =========================
-    # st.write(df[["Pessoa","Valor"]])
+    st.subheader("🗑️ Eliminar registo")
+
+    raw = sheet.get_all_values()
+    rows = raw[1:]
+
+    data = []
+    for i, r in enumerate(rows, start=2):
+        if len(r) >= 5:
+            data.append({
+                "linha": i,
+                "Pessoa": r[0],
+                "Tipo": r[1],
+                "Valor": r[4]
+            })
+
+    df_del = pd.DataFrame(data)
+
+    if not df_del.empty:
+
+        idx = st.selectbox("Seleciona registo", df_del.index)
+        linha = int(df_del.loc[idx, "linha"])
+
+        confirmar = st.checkbox("Confirmo eliminação")
+
+        if confirmar:
+            if st.button("Eliminar"):
+                sheet.delete_rows(linha)
+                st.success("Eliminado")
+                st.rerun()
 
 else:
     st.info("Sem dados ainda")
