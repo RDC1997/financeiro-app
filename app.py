@@ -34,21 +34,36 @@ except Exception:
     st.stop()
 
 # =========================
-# DATA
+# DATA (ROBUSTO - SEM CRASH)
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
     raw = sheet.get_all_values()
 
-    if not raw or len(raw) < 2:
-        return pd.DataFrame()
+    expected_cols = ["Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
 
-    df = pd.DataFrame(raw[1:], columns=raw[0])
-    df.columns = df.columns.str.strip()
+    # se não houver dados
+    if not raw or len(raw) < 2:
+        return pd.DataFrame(columns=expected_cols)
+
+    headers = [h.strip() for h in raw[0]]
+    df = pd.DataFrame(raw[1:], columns=headers)
+
+    # 🔒 garantir colunas sempre existentes
+    for col in expected_cols:
+        if col not in df.columns:
+            df[col] = ""
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
+    df["Tipo"] = df["Tipo"].astype(str).str.strip()
+    df["Categoria"] = df["Categoria"].astype(str).str.strip()
+    df["Descrição"] = df["Descrição"].astype(str).fillna("")
+
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
+
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
+
+    df["sheet_row"] = df.index + 2
 
     return df
 
@@ -78,7 +93,7 @@ avatars = {
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
-# 🟢 CASAL (CORRIGIDO LIMPO)
+# 🟢 CASAL (ESTÁVEL)
 # =========================
 if modo == "Casal":
 
@@ -88,13 +103,13 @@ if modo == "Casal":
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        df_p = df[df["Pessoa"] == pessoa]
+        df_p = df[df.get("Pessoa", "") == pessoa]
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
         # =========================
-        # 💰 RECEITAS (RESTAUROU)
+        # 💰 RECEITAS
         # =========================
         st.markdown("### 💰 Receitas")
 
@@ -124,10 +139,9 @@ if modo == "Casal":
             st.table(despesas[["Categoria","Valor","Data"]])
 
             # =========================
-            # 💰 TOTAL DESPESAS (SÓ ISTO)
+            # 💰 TOTAL DESPESAS
             # =========================
             total = despesas["Valor"].sum()
-
             st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
 
         else:
@@ -136,7 +150,7 @@ if modo == "Casal":
     st.stop()
 
 # =========================
-# 🔵 GESTÃO
+# 🔵 GESTÃO (RUBEN / GABI)
 # =========================
 st.subheader(f"➕ Novo registo ({modo})")
 
@@ -156,7 +170,7 @@ if tipo == "Despesa":
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
-# ❌ bloquear datas futuras
+# ❌ bloqueio data futura
 if data > datetime.today().date():
     st.error("Não podes escolher data futura")
     st.stop()
@@ -181,17 +195,17 @@ if st.button("Adicionar"):
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
 
-for _, row in df[df["Pessoa"] == modo].iterrows():
+for _, row in df[df.get("Pessoa", "") == modo].iterrows():
 
     c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
-    c1.write(row["Pessoa"])
-    c2.write(row["Tipo"])
-    c3.write(row["Categoria"])
-    c4.write(row["Valor"])
+    c1.write(row.get("Pessoa",""))
+    c2.write(row.get("Tipo",""))
+    c3.write(row.get("Categoria",""))
+    c4.write(row.get("Valor",""))
 
-    if c5.button("❌", key=f"del_{row.name}"):
-        sheet.delete_rows(row.name + 2)
+    if c5.button("❌", key=f"del_{row.get('sheet_row',_)}"):
+        sheet.delete_rows(row.get("sheet_row", _ + 2))
         st.cache_data.clear()
         st.success("Eliminado")
         st.rerun()
