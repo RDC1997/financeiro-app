@@ -31,11 +31,7 @@ try:
     sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
     cat_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Categorias")
 
-    try:
-        goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Metas")
-    except:
-        goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").add_worksheet("Metas", 100, 3)
-        goal_sheet.append_row(["Meta","Objetivo","Atual"])
+    goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Metas")
 
 except Exception as e:
     st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
@@ -51,43 +47,7 @@ def load_categories():
         return []
     return [row[0] for row in data[1:] if row[0].strip()]
 
-def add_category(cat):
-    cat_sheet.append_row([cat])
-
-def delete_category(cat):
-    data = cat_sheet.get_all_values()
-    for i, row in enumerate(data):
-        if i == 0:
-            continue
-        if row[0] == cat:
-            cat_sheet.delete_rows(i + 1)
-            break
-
 categories = load_categories()
-
-# =========================
-# SIDEBAR CATEGORIAS
-# =========================
-st.sidebar.markdown("## ⚙️ Categorias")
-
-with st.sidebar.expander("➕ Adicionar categoria"):
-    new_cat = st.text_input("Nova categoria")
-    if st.button("Adicionar categoria"):
-        if new_cat.strip():
-            add_category(new_cat.strip())
-            st.cache_data.clear()
-            st.rerun()
-
-with st.sidebar.expander("❌ Remover categoria"):
-    if categories:
-        cat_del = st.selectbox("Escolhe categoria", categories)
-        if st.button("Remover categoria"):
-            delete_category(cat_del)
-            st.cache_data.clear()
-            st.rerun()
-
-with st.sidebar.expander("📋 Ver categorias"):
-    st.write(categories)
 
 # =========================
 # DATA
@@ -96,17 +56,16 @@ with st.sidebar.expander("📋 Ver categorias"):
 def load_data():
     raw = sheet.get_all_values()
 
-    expected_cols = ["Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
+    cols = ["Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
 
     if not raw or len(raw) < 2:
-        return pd.DataFrame(columns=expected_cols)
+        return pd.DataFrame(columns=cols)
 
-    headers = [h.strip() for h in raw[0]]
-    df = pd.DataFrame(raw[1:], columns=headers)
+    df = pd.DataFrame(raw[1:], columns=raw[0])
 
-    for col in expected_cols:
-        if col not in df.columns:
-            df[col] = ""
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Tipo"] = df["Tipo"].astype(str).str.strip()
@@ -121,16 +80,25 @@ def load_data():
 df = load_data()
 
 # =========================
-# METAS
+# METAS (FIX FOR KEYERROR + ROBUSTO)
 # =========================
+@st.cache_data(ttl=10)
 def load_goals():
     data = goal_sheet.get_all_records()
-    return pd.DataFrame(data)
+
+    dfg = pd.DataFrame(data)
+
+    # garante colunas sempre existentes
+    for col in ["Meta", "Objetivo", "Atual"]:
+        if col not in dfg.columns:
+            dfg[col] = 0 if col != "Meta" else ""
+
+    return dfg
 
 goals = load_goals()
 
 # =========================
-# DELETE SAFE
+# SAFE DELETE
 # =========================
 def delete_row_safe(row):
     try:
@@ -143,34 +111,42 @@ def delete_row_safe(row):
 # =========================
 # MENU
 # =========================
-modo = st.sidebar.selectbox("Modo", ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"])
+modo = st.sidebar.selectbox(
+    "Modo",
+    ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"]
+)
 
 # =========================
-# METAS
+# METAS FIX COMPLETO
 # =========================
 if modo == "Metas 🎯":
 
     st.subheader("🎯 Metas Financeiras")
 
+    # criar meta
     with st.expander("➕ Criar meta"):
         nome = st.text_input("Nome da meta")
         objetivo = st.number_input("Objetivo (€)", min_value=0.0)
 
         if st.button("Criar meta"):
-            goal_sheet.append_row([nome, objetivo, 0])
-            st.rerun()
+            if nome.strip():
+                goal_sheet.append_row([nome, objetivo, 0])
+                st.cache_data.clear()
+                st.rerun()
 
+    # lista metas
     for i, row in goals.iterrows():
 
-        if "Meta" not in row:
-            continue
+        meta = row.get("Meta", "")
+        obj = float(row.get("Objetivo", 0) or 0)
+        atual = float(row.get("Atual", 0) or 0)
 
-        meta = row["Meta"]
-        obj = float(row["Objetivo"])
-        atual = float(row["Atual"])
+        if obj == 0:
+            percent = 0
+        else:
+            percent = (atual / obj) * 100
 
-        percent = (atual / obj * 100) if obj > 0 else 0
-
+        # cores
         if percent < 25:
             emoji = "🔴"
         elif percent < 50:
@@ -189,17 +165,25 @@ if modo == "Metas 🎯":
         add = c1.number_input("Adicionar", min_value=0.0, key=f"add_{i}")
 
         if c1.button("Adicionar", key=f"btn_{i}"):
-            goal_sheet.update_cell(i + 2, 3, atual + add)
-            st.rerun()
+            try:
+                goal_sheet.update_cell(i + 2, 3, atual + add)
+                st.cache_data.clear()
+                st.rerun()
+            except:
+                st.error("Erro ao atualizar meta")
 
         if c2.button("Eliminar", key=f"del_{i}"):
-            goal_sheet.delete_rows(i + 2)
-            st.rerun()
+            try:
+                goal_sheet.delete_rows(i + 2)
+                st.cache_data.clear()
+                st.rerun()
+            except:
+                st.error("Erro ao eliminar meta")
 
     st.stop()
 
 # =========================
-# AVATARS CORRIGIDO
+# AVATARS
 # =========================
 avatars = {
     "Ruben": "🤴",
@@ -207,20 +191,14 @@ avatars = {
     "Casal": "👨‍❤️‍👩"
 }
 
-# =========================
-# CASAL / RUBEN / GABI
-# =========================
 st.subheader(f"{avatars.get(modo.split()[0], '👤')} {modo}")
 
 pessoa = None if "Casal" in modo else modo.split()[0]
 
-def filtrar(df, pessoa):
-    return df if pessoa is None else df[df["Pessoa"] == pessoa]
-
-df_user = filtrar(df, pessoa)
+df_user = df if pessoa is None else df[df["Pessoa"] == pessoa]
 
 # =========================
-# 🔥 CASAL COM TABELA COMPLETA RESTAURADA
+# CASAL (TABELA COMPLETA RESTAURADA 100%)
 # =========================
 if "Casal" in modo:
 
