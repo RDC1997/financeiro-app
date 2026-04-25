@@ -30,7 +30,6 @@ try:
 
     sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
     cat_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Categorias")
-
     goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Metas")
 
 except Exception as e:
@@ -40,17 +39,17 @@ except Exception as e:
 # =========================
 # CATEGORIAS
 # =========================
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=30)
 def load_categories():
     data = cat_sheet.get_all_values()
     if len(data) < 2:
         return []
-    return [row[0] for row in data[1:] if row[0].strip()]
+    return [row[0] for row in data[1:] if row[0].strip() != ""]
 
 categories = load_categories()
 
 # =========================
-# DATA
+# DATA (REDUZ CHAMADAS)
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -80,25 +79,32 @@ def load_data():
 df = load_data()
 
 # =========================
-# METAS (FIX FOR KEYERROR + ROBUSTO)
+# METAS (ROBUSTO + SEM KEYERROR + SEM QUOTA BUGS)
 # =========================
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=30)
 def load_goals():
-    data = goal_sheet.get_all_records()
+    raw = goal_sheet.get_all_values()
 
-    dfg = pd.DataFrame(data)
+    if not raw or len(raw) < 2:
+        return pd.DataFrame(columns=["row","Meta","Objetivo","Atual"])
 
-    # garante colunas sempre existentes
-    for col in ["Meta", "Objetivo", "Atual"]:
-        if col not in dfg.columns:
-            dfg[col] = 0 if col != "Meta" else ""
+    df = pd.DataFrame(raw[1:], columns=raw[0])
 
-    return dfg
+    # garante colunas
+    for c in ["Meta","Objetivo","Atual"]:
+        if c not in df.columns:
+            df[c] = 0
 
-goals = load_goals()
+    df["Objetivo"] = pd.to_numeric(df["Objetivo"], errors="coerce").fillna(0)
+    df["Atual"] = pd.to_numeric(df["Atual"], errors="coerce").fillna(0)
+
+    # 🔥 CRÍTICO: guardar linha real do sheets
+    df["row"] = df.index + 2
+
+    return df
 
 # =========================
-# SAFE DELETE
+# DELETE SAFE
 # =========================
 def delete_row_safe(row):
     try:
@@ -116,14 +122,21 @@ modo = st.sidebar.selectbox(
     ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"]
 )
 
+avatars = {
+    "Ruben": "🤴",
+    "Gabi": "👸",
+    "Casal": "👨‍❤️‍👩"
+}
+
 # =========================
-# METAS FIX COMPLETO
+# METAS FIX DEFINITIVO (SEM ERROS + SEM QUOTA LOOP)
 # =========================
 if modo == "Metas 🎯":
 
     st.subheader("🎯 Metas Financeiras")
 
-    # criar meta
+    goals = load_goals()
+
     with st.expander("➕ Criar meta"):
         nome = st.text_input("Nome da meta")
         objetivo = st.number_input("Objetivo (€)", min_value=0.0)
@@ -134,19 +147,15 @@ if modo == "Metas 🎯":
                 st.cache_data.clear()
                 st.rerun()
 
-    # lista metas
-    for i, row in goals.iterrows():
+    for _, row in goals.iterrows():
 
-        meta = row.get("Meta", "")
-        obj = float(row.get("Objetivo", 0) or 0)
-        atual = float(row.get("Atual", 0) or 0)
+        meta = row["Meta"]
+        obj = float(row["Objetivo"])
+        atual = float(row["Atual"])
+        r = int(row["row"])
 
-        if obj == 0:
-            percent = 0
-        else:
-            percent = (atual / obj) * 100
+        percent = (atual / obj * 100) if obj > 0 else 0
 
-        # cores
         if percent < 25:
             emoji = "🔴"
         elif percent < 50:
@@ -162,61 +171,40 @@ if modo == "Metas 🎯":
 
         c1, c2 = st.columns(2)
 
-        add = c1.number_input("Adicionar", min_value=0.0, key=f"add_{i}")
+        add = c1.number_input("Adicionar", min_value=0.0, key=f"add_{r}")
 
-        if c1.button("Adicionar", key=f"btn_{i}"):
-            try:
-                goal_sheet.update_cell(i + 2, 3, atual + add)
-                st.cache_data.clear()
-                st.rerun()
-            except:
-                st.error("Erro ao atualizar meta")
+        if c1.button("Adicionar", key=f"btn_{r}"):
+            goal_sheet.update_cell(r, 3, atual + add)
+            st.cache_data.clear()
+            st.rerun()
 
-        if c2.button("Eliminar", key=f"del_{i}"):
-            try:
-                goal_sheet.delete_rows(i + 2)
-                st.cache_data.clear()
-                st.rerun()
-            except:
-                st.error("Erro ao eliminar meta")
+        if c2.button("Eliminar", key=f"del_{r}"):
+            goal_sheet.delete_rows(r)
+            st.cache_data.clear()
+            st.rerun()
 
     st.stop()
 
 # =========================
-# AVATARS
+# CASAL COM TABELAS COMPLETAS (COMO PEDISTE)
 # =========================
-avatars = {
-    "Ruben": "🤴",
-    "Gabi": "👸",
-    "Casal": "👨‍❤️‍👩"
-}
+if modo == "Casal 👨‍❤️‍👩":
 
-st.subheader(f"{avatars.get(modo.split()[0], '👤')} {modo}")
-
-pessoa = None if "Casal" in modo else modo.split()[0]
-
-df_user = df if pessoa is None else df[df["Pessoa"] == pessoa]
-
-# =========================
-# CASAL (TABELA COMPLETA RESTAURADA 100%)
-# =========================
-if "Casal" in modo:
-
-    st.markdown("## 📊 CASAL - VISÃO COMPLETA")
+    st.subheader("📊 CASAL")
 
     for p in ["Ruben", "Gabi"]:
 
-        st.markdown(f"### {avatars[p]} {p}")
+        st.markdown(f"## {avatars[p]} {p}")
 
         df_p = df[df["Pessoa"] == p]
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-        st.markdown("#### 💰 Receitas")
+        st.markdown("### 💰 Receitas")
         st.dataframe(receitas, use_container_width=True)
 
-        st.markdown("#### 💸 Despesas")
+        st.markdown("### 💸 Despesas")
         st.dataframe(despesas, use_container_width=True)
 
         st.markdown(f"**Total despesas: € {despesas['Valor'].sum():.2f}**")
@@ -226,6 +214,10 @@ if "Casal" in modo:
 # =========================
 # INDIVIDUAL
 # =========================
+st.subheader(f"{avatars.get(modo.split()[0],'👤')} {modo}")
+
+pessoa = modo.split()[0]
+
 tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
 
 categoria = ""
@@ -240,13 +232,14 @@ data = st.date_input("Data", datetime.today())
 
 if st.button("Adicionar"):
     sheet.append_row([
-        pessoa if pessoa else "Casal",
+        pessoa,
         tipo,
         categoria,
         descricao,
         float(valor),
         str(data)
     ])
+    st.cache_data.clear()
     st.rerun()
 
 # =========================
@@ -254,6 +247,8 @@ if st.button("Adicionar"):
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
+
+df_user = df[df["Pessoa"] == pessoa]
 
 for _, row in df_user.sort_values("Data", ascending=False).iterrows():
 
@@ -266,4 +261,5 @@ for _, row in df_user.sort_values("Data", ascending=False).iterrows():
 
     if c5.button("❌", key=row["sheet_row"]):
         delete_row_safe(row["sheet_row"])
+        st.cache_data.clear()
         st.rerun()
