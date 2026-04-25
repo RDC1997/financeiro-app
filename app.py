@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import time
 import uuid
+import plotly.express as px
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -10,8 +11,8 @@ from google.oauth2.service_account import Credentials
 # =========================
 # APP
 # =========================
-st.set_page_config(page_title="Rubi&Gabi Finance", layout="wide")
-st.title("💰 Controlo Financeiro")
+st.set_page_config(page_title="Rubi&Gabi Finance PRO", layout="wide")
+st.title("💰 Controlo Financeiro PRO")
 
 # =========================
 # HELPERS
@@ -59,7 +60,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CATEGORIAS (RESTAURADO COMPLETO)
+# CATEGORIAS (NÃO ALTERADO)
 # =========================
 @st.cache_data(ttl=30)
 def load_categories():
@@ -114,7 +115,7 @@ modo = st.sidebar.selectbox(
 avatars = {"Ruben":"🤴","Gabi":"👸"}
 
 # =========================
-# CATEGORIAS UI
+# CATEGORIAS UI (NÃO ALTERADO)
 # =========================
 st.sidebar.markdown("## ⚙️ Categorias")
 
@@ -138,11 +139,11 @@ with st.sidebar.expander("📋 Ver categorias"):
     st.write(categories)
 
 # =========================
-# CASAL (SUBSTITUÍDO COMO PEDISTE)
+# CASAL (MANTIDO + MELHORADO)
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
-    st.subheader("📊 Visão Geral (Ciclos por salário)")
+    st.subheader("👨‍❤️‍👩 Casal - Visão PRO por Ciclo de Salário")
 
     def get_last_salary(df, pessoa):
         df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
@@ -167,35 +168,58 @@ if modo == "Casal 👨‍❤️‍👩":
 
         df_p = filtrar_ciclo(df, pessoa)
 
+        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+        despesas = df_p[df_p["Tipo"] == "Despesa"]
+
+        # =========================
+        # 🔥 NOVO: MÉTRICAS PRO
+        # =========================
+        total_receitas = receitas["Valor"].sum()
+        total_despesas = despesas["Valor"].sum()
+        saldo = total_receitas - total_despesas
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("💰 Receitas", f"{total_receitas:.2f} €")
+        c2.metric("💸 Despesas", f"{total_despesas:.2f} €")
+        c3.metric("📊 Saldo", f"{saldo:.2f} €")
+
+        # =========================
+        # 🔥 NOVO: GRÁFICO
+        # =========================
+        if not despesas.empty:
+            fig = px.bar(
+                despesas,
+                x="Categoria",
+                y="Valor",
+                title=f"Despesas por Categoria - {pessoa}"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        # =========================
+        # TABELAS ORIGINAIS (NÃO REMOVIDAS)
+        # =========================
         with st.expander(f"🔍 Debug do ciclo - {pessoa}"):
             st.write("Último salário:", get_last_salary(df, pessoa))
             st.write("Registos no ciclo:", len(df_p))
             st.dataframe(df_p[["Tipo","Valor","Data"]])
 
-        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
-        despesas = df_p[df_p["Tipo"] == "Despesa"]
-
         st.markdown("### 💰 Receitas")
-
         if not receitas.empty:
             st.dataframe(receitas[["Tipo","Valor","Data"]], use_container_width=True)
         else:
             st.info("Sem receitas neste ciclo")
 
         st.markdown("### 💸 Despesas")
-
         if not despesas.empty:
             st.dataframe(despesas[["Categoria","Valor","Data"]], use_container_width=True)
-
-            total = despesas["Valor"].sum()
-            st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
+            st.markdown(f"### 💰 Total: **€ {total_despesas:.2f}**")
         else:
             st.info("Sem despesas neste ciclo")
 
     st.stop()
 
 # =========================
-# METAS
+# METAS (NÃO ALTERADO)
 # =========================
 if modo == "Metas 🎯":
 
@@ -220,7 +244,7 @@ if modo == "Metas 🎯":
     st.stop()
 
 # =========================
-# INDIVIDUAL
+# INDIVIDUAL (NÃO ALTERADO)
 # =========================
 pessoa = modo.split()[0]
 
@@ -251,7 +275,7 @@ if st.button("Adicionar"):
     refresh()
 
 # =========================
-# DELETE
+# DELETE (NÃO ALTERADO)
 # =========================
 st.markdown("---")
 st.subheader("🗑 Registos")
