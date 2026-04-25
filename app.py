@@ -138,7 +138,7 @@ with st.sidebar.expander("📋 Ver categorias"):
     st.write(categories)
 
 # =========================
-# CASAL (igual)
+# CASAL (COM INSIGHT RESTAURADO)
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
@@ -180,6 +180,26 @@ if modo == "Casal 👨‍❤️‍👩":
         st.markdown("### 💸 Despesas")
         st.dataframe(despesas, use_container_width=True)
 
+        # =========================
+        # 🧠 INSIGHT RESTAURADO (IMPORTANTE)
+        # =========================
+        st.markdown("### 🧠 Análise do ciclo")
+
+        if total_receitas == 0 and total_despesas == 0:
+            st.info("Sem dados suficientes para análise neste ciclo.")
+        else:
+            if saldo < 0:
+                st.error("⚠️ Estás em défice neste ciclo.")
+            else:
+                taxa = (saldo / total_receitas * 100) if total_receitas > 0 else 0
+
+                if taxa < 10:
+                    st.warning("⚠️ Poupança baixa neste ciclo.")
+                elif taxa < 25:
+                    st.info("📊 Estás equilibrado.")
+                else:
+                    st.success("🟢 Excelente controlo financeiro!")
+
         st.markdown("#### 🗑 Eliminar registos")
 
         for _, row in df_p.iterrows():
@@ -205,7 +225,7 @@ if modo == "Casal 👨‍❤️‍👩":
     st.stop()
 
 # =========================
-# METAS (CORRIGIDO SEM EMPTY TABLE)
+# METAS (SEM TABELA VAZIA)
 # =========================
 if modo == "Metas 🎯":
 
@@ -225,7 +245,6 @@ if modo == "Metas 🎯":
             goal_sheet.append_row([nome,obj,0])
             refresh()
 
-    # 🔥 FIX PRINCIPAL AQUI
     st.markdown("### 📊 Metas atuais")
 
     if goals.empty:
@@ -233,21 +252,10 @@ if modo == "Metas 🎯":
     else:
         st.dataframe(goals, use_container_width=True)
 
-    st.markdown("#### 🗑 Eliminar metas")
-
-    for i, row in goals.iterrows():
-        c1,c2,c3 = st.columns([3,2,1])
-        c1.write(row.get("Meta",""))
-        c2.write(row.get("Objetivo",""))
-
-        if c3.button("❌", key=f"goal_{i}"):
-            goal_sheet.delete_rows(i+2)
-            refresh()
-
     st.stop()
 
 # =========================
-# INDIVIDUAL (igual)
+# INDIVIDUAL
 # =========================
 pessoa = modo.split()[0]
 
