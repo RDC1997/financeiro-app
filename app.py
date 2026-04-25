@@ -34,7 +34,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# DATA (COM LINHA REAL SHEET)
+# DATA
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -43,17 +43,13 @@ def load_data():
     if not raw or len(raw) < 2:
         return pd.DataFrame()
 
-    headers = raw[0]
-    data = raw[1:]
-
-    df = pd.DataFrame(data, columns=headers)
+    df = pd.DataFrame(raw[1:], columns=raw[0])
     df.columns = df.columns.str.strip()
 
     df["Pessoa"] = df["Pessoa"].astype(str).str.strip()
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
-    # 🔥 GUARDA LINHA REAL DA SHEET
     df["sheet_row"] = df.index + 2
 
     return df
@@ -68,8 +64,8 @@ def guardar(d):
         str(d["Data"])
     ])
 
-def eliminar_linha(sheet_row):
-    sheet.delete_rows(sheet_row)
+def eliminar_linha(row):
+    sheet.delete_rows(row)
 
 df = load_data()
 
@@ -112,7 +108,7 @@ if not df.empty:
         df = df[df["Mes"] == mes]
 
 # =========================
-# 🟢 CASAL
+# 🟢 CASAL (CORRIGIDO)
 # =========================
 if modo == "Casal":
 
@@ -126,23 +122,41 @@ if modo == "Casal":
 
     st.markdown("---")
 
+    # =========================
+    # RECEITAS (RESTAUROU)
+    # =========================
+    st.markdown("## 💰 Receitas")
+
+    if not receitas.empty:
+        st.table(receitas[["Pessoa","Tipo","Valor","Data"]])
+    else:
+        st.info("Sem receitas")
+
+    # =========================
+    # DESPESAS
+    # =========================
     st.markdown("## 💸 Despesas")
 
-    despesas = despesas.copy()
+    if not despesas.empty:
 
-    despesas["Categoria"] = despesas.apply(
-        lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
-        if r["Categoria"] == "Outros"
-        else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
-        axis=1
-    )
+        despesas = despesas.copy()
 
-    st.table(despesas[["Pessoa","Categoria","Valor","Data"]])
+        despesas["Categoria"] = despesas.apply(
+            lambda r: f"{icons.get(r['Categoria'],'')} {r['Categoria']} - {r['Descrição']}"
+            if r["Categoria"] == "Outros" and r["Descrição"]
+            else f"{icons.get(r['Categoria'],'')} {r['Categoria']}",
+            axis=1
+        )
+
+        st.table(despesas[["Pessoa","Categoria","Valor","Data"]])
+
+    else:
+        st.info("Sem despesas")
 
     st.stop()
 
 # =========================
-# 🔵 GESTÃO
+# 🔵 GESTÃO (CORRIGIDO OUTROS + DATA)
 # =========================
 st.subheader("➕ Novo registo")
 
@@ -157,10 +171,16 @@ if tipo == "Despesa":
     categoria = st.selectbox("Categoria", list(icons.keys()))
 
     if categoria == "Outros":
-        descricao = st.text_input("Descrição")
+        descricao = st.text_input("Descrição obrigatória")
 
 valor = st.number_input("Valor (€)", min_value=0.0)
+
+# 🔒 BLOQUEIO DATA FUTURA
 data = st.date_input("Data", datetime.today())
+
+if data > datetime.today().date():
+    st.error("Não podes escolher uma data futura")
+    st.stop()
 
 if st.button("Adicionar"):
     guardar({
@@ -177,23 +197,22 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# 🗑 ELIMINAR (CORRIGIDO)
+# 🗑 ELIMINAR
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
 
 for _, row in df.iterrows():
 
-    col1, col2, col3, col4, col5 = st.columns([2,3,2,2,1])
+    c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
-    col1.write(row["Pessoa"])
-    col2.write(row["Tipo"])
-    col3.write(row["Categoria"])
-    col4.write(row["Valor"])
+    c1.write(row["Pessoa"])
+    c2.write(row["Tipo"])
+    c3.write(row["Categoria"])
+    c4.write(row["Valor"])
 
-    if col5.button("❌", key=f"del_{row['sheet_row']}"):
-
+    if c5.button("❌", key=f"del_{row['sheet_row']}"):
         eliminar_linha(row["sheet_row"])
         st.cache_data.clear()
-        st.success("Eliminado com sucesso")
+        st.success("Eliminado")
         st.rerun()
