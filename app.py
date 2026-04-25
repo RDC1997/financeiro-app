@@ -114,7 +114,7 @@ modo = st.sidebar.selectbox(
 avatars = {"Ruben":"🤴","Gabi":"👸"}
 
 # =========================
-# CATEGORIAS UI (RESTAURADO)
+# CATEGORIAS UI
 # =========================
 st.sidebar.markdown("## ⚙️ Categorias")
 
@@ -138,35 +138,59 @@ with st.sidebar.expander("📋 Ver categorias"):
     st.write(categories)
 
 # =========================
-# CASAL (CORRIGIDO - LÓGICA MENSAL)
+# CASAL (SUBSTITUÍDO COMO PEDISTE)
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
-    st.subheader("👨‍❤️‍👩 Casal - Visão Mensal")
+    st.subheader("📊 Visão Geral (Ciclos por salário)")
 
-    mes_atual = datetime.today().month
+    def get_last_salary(df, pessoa):
+        df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
+        if df_p.empty:
+            return None
+        return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
 
-    for p in ["Ruben","Gabi"]:
+    def filtrar_ciclo(df, pessoa):
+        last_salary = get_last_salary(df, pessoa)
 
-        st.markdown(f"## {avatars[p]} {p}")
+        if not last_salary:
+            return df[df["Pessoa"] == pessoa]
 
-        df_p = df[df["Pessoa"] == p]
-        df_mes = df_p[pd.to_datetime(df_p["Data"]).dt.month == mes_atual]
+        return df[
+            (df["Pessoa"] == pessoa) &
+            (df["Data"] >= last_salary)
+        ]
 
-        receitas = df_mes[df_mes["Tipo"] != "Despesa"]
-        despesas = df_mes[df_mes["Tipo"] == "Despesa"]
+    for pessoa in ["Ruben","Gabi"]:
 
-        st.markdown("### 📅 Mês atual")
+        st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        st.write("#### 💰 Receitas")
-        st.dataframe(receitas, use_container_width=True)
+        df_p = filtrar_ciclo(df, pessoa)
 
-        st.write("#### 💸 Despesas")
-        st.dataframe(despesas, use_container_width=True)
+        with st.expander(f"🔍 Debug do ciclo - {pessoa}"):
+            st.write("Último salário:", get_last_salary(df, pessoa))
+            st.write("Registos no ciclo:", len(df_p))
+            st.dataframe(df_p[["Tipo","Valor","Data"]])
 
-        st.write(f"**Total despesas: € {despesas['Valor'].sum():.2f}**")
+        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+        despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-        st.markdown("---")
+        st.markdown("### 💰 Receitas")
+
+        if not receitas.empty:
+            st.dataframe(receitas[["Tipo","Valor","Data"]], use_container_width=True)
+        else:
+            st.info("Sem receitas neste ciclo")
+
+        st.markdown("### 💸 Despesas")
+
+        if not despesas.empty:
+            st.dataframe(despesas[["Categoria","Valor","Data"]], use_container_width=True)
+
+            total = despesas["Valor"].sum()
+            st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
+        else:
+            st.info("Sem despesas neste ciclo")
 
     st.stop()
 
