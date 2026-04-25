@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 from datetime import datetime
 
 import gspread
@@ -10,7 +11,7 @@ from google.oauth2.service_account import Credentials
 # APP
 # =========================
 st.set_page_config(page_title="Rubi&Gabi", layout="wide")
-st.title("💰 Rubi&Gabi")
+st.title("💰 Rubi&Gabi - Controlo Financeiro")
 
 # =========================
 # GOOGLE SHEETS
@@ -48,7 +49,6 @@ def load_data():
     df["Mês"] = pd.to_numeric(df["Mês"], errors="coerce").fillna(0).astype(int)
     df["Ano"] = pd.to_numeric(df["Ano"], errors="coerce").fillna(0).astype(int)
 
-    # converter data
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
     return df
@@ -71,26 +71,32 @@ def guardar(d):
 df = load_data()
 
 # =========================
-# FILTRO TEMPORAL
+# FILTROS
 # =========================
-st.sidebar.subheader("📅 Filtros")
+st.sidebar.header("🔍 Filtros")
+
+pessoa_f = st.sidebar.selectbox("Pessoa", ["Todos", "Ruben", "Gabi"])
 
 if not df.empty:
     meses = sorted(df["Mês"].unique())
     anos = sorted(df["Ano"].unique())
 
-    mes_sel = st.sidebar.selectbox("Mês", ["Todos"] + list(meses))
-    ano_sel = st.sidebar.selectbox("Ano", ["Todos"] + list(anos))
-
-    df_view = df.copy()
-
-    if mes_sel != "Todos":
-        df_view = df_view[df_view["Mês"] == mes_sel]
-
-    if ano_sel != "Todos":
-        df_view = df_view[df_view["Ano"] == ano_sel]
+    mes_f = st.sidebar.selectbox("Mês", ["Todos"] + list(meses))
+    ano_f = st.sidebar.selectbox("Ano", ["Todos"] + list(anos))
 else:
-    df_view = df
+    mes_f = "Todos"
+    ano_f = "Todos"
+
+df_view = df.copy()
+
+if pessoa_f != "Todos":
+    df_view = df_view[df_view["Pessoa"] == pessoa_f]
+
+if mes_f != "Todos":
+    df_view = df_view[df_view["Mês"] == mes_f]
+
+if ano_f != "Todos":
+    df_view = df_view[df_view["Ano"] == ano_f]
 
 # =========================
 # NOVO REGISTO
@@ -134,15 +140,15 @@ if st.button("Adicionar"):
     st.rerun()
 
 # =========================
-# DASHBOARD PRINCIPAL
+# DASHBOARD
 # =========================
 if not df_view.empty:
 
-    receitas = df_view[df_view["Tipo"].isin(["Salário", "Subsídio Alimentação"])]["Valor"].sum()
-    despesas = df_view[df_view["Tipo"] == "Despesa"]["Valor"].sum()
+    receitas = df_view[df_view["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
+    despesas = df_view[df_view["Tipo"]=="Despesa"]["Valor"].sum()
     saldo = receitas - despesas
 
-    c1, c2, c3 = st.columns(3)
+    c1,c2,c3 = st.columns(3)
     c1.metric("Receitas", f"€ {receitas:.2f}")
     c2.metric("Despesas", f"€ {despesas:.2f}")
     c3.metric("Saldo", f"€ {saldo:.2f}")
@@ -153,18 +159,19 @@ if not df_view.empty:
     st.subheader("⚠️ Alertas")
 
     if despesas > receitas:
-        st.error("Estás a gastar mais do que estás a receber!")
+        st.error("Estás a gastar mais do que recebes!")
 
-    if despesas > receitas * 0.8:
-        st.warning("As tuas despesas estão muito perto das receitas")
+    if receitas > 0 and despesas / receitas > 0.8:
+        st.warning("Estás a aproximar-te do limite saudável de gastos")
 
-    if df_view[df_view["Tipo"]=="Despesa"]["Valor"].sum() > 1000:
-        st.warning("Gastos elevados este período")
+    media_despesas = df_view[df_view["Tipo"]=="Despesa"]["Valor"].mean()
+    if despesas > media_despesas * 1.5:
+        st.warning("Gastos acima da tua média habitual")
 
     # =========================
-    # EVOLUÇÃO SALDO (GRÁFICO REAL)
+    # EVOLUÇÃO SALDO (REAL)
     # =========================
-    st.subheader("📈 Evolução do saldo")
+    st.subheader("📈 Evolução financeira")
 
     temp = df_view.copy()
 
@@ -182,9 +189,25 @@ if not df_view.empty:
     )
 
     # =========================
-    # TOP CATEGORIAS
+    # TENDÊNCIA (PREVISÃO SIMPLES)
     # =========================
-    st.subheader("🔥 Top categorias")
+    st.subheader("🔮 Tendência financeira")
+
+    if len(temp) > 3:
+        x = np.arange(len(temp))
+        y = temp["Saldo acumulado"].values
+
+        coef = np.polyfit(x, y, 1)
+        trend = np.poly1d(coef)
+
+        future = trend(len(temp) + 5)
+
+        st.info(f"Previsão simples de tendência: € {future:.2f}")
+
+    # =========================
+    # CATEGORIAS
+    # =========================
+    st.subheader("🔥 Onde gastas mais")
 
     cat = df_view[df_view["Tipo"]=="Despesa"].groupby("Categoria")["Valor"].sum().reset_index()
 
@@ -208,9 +231,9 @@ if not df_view.empty:
 
     novas = []
 
-    for i, m in enumerate(st.session_state.metas):
+    for i,m in enumerate(st.session_state.metas):
 
-        col1, col2 = st.columns(2)
+        col1,col2 = st.columns(2)
 
         with col1:
             nome = st.text_input("", value=m["nome"], key=f"mn_{i}", label_visibility="collapsed")
@@ -229,22 +252,13 @@ if not df_view.empty:
 
         st.progress(progresso)
 
-        novas.append({"nome": nome, "valor": val})
+        novas.append({"nome":nome,"valor":val})
 
     st.session_state.metas = novas
 
     if st.button("➕ Nova meta"):
         st.session_state.metas.append({"nome":"Nova meta","valor":1000})
         st.rerun()
-
-    # =========================
-    # BACKUP
-    # =========================
-    st.download_button(
-        "Backup CSV",
-        df.to_csv(index=False).encode(),
-        "backup.csv"
-    )
 
 else:
     st.info("Sem dados")
