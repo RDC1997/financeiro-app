@@ -66,6 +66,28 @@ def load_data():
 df = load_data()
 
 # =========================
+# 🔥 CICLO POR SALÁRIO (NOVO)
+# =========================
+def get_last_salary(df, pessoa):
+    df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
+
+    if df_p.empty:
+        return None
+
+    return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
+
+def filtrar_ciclo(df, pessoa):
+    last_salary = get_last_salary(df, pessoa)
+
+    if not last_salary:
+        return df[df["Pessoa"] == pessoa]
+
+    return df[
+        (df["Pessoa"] == pessoa) &
+        (df["Data"] >= last_salary)
+    ]
+
+# =========================
 # ICONS
 # =========================
 icons = {
@@ -93,13 +115,14 @@ modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 # =========================
 if modo == "Casal":
 
-    st.subheader("📊 Visão Geral")
+    st.subheader("📊 Visão Geral (Ciclos por salário)")
 
     for pessoa in ["Ruben", "Gabi"]:
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
-        df_p = df[df.get("Pessoa", "") == pessoa]
+        # 🔥 AQUI JÁ USA CICLO
+        df_p = filtrar_ciclo(df, pessoa)
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
@@ -109,7 +132,7 @@ if modo == "Casal":
         if not receitas.empty:
             st.dataframe(receitas[["Tipo","Valor","Data"]], use_container_width=True)
         else:
-            st.info("Sem receitas")
+            st.info("Sem receitas neste ciclo")
 
         st.markdown("### 💸 Despesas")
 
@@ -119,7 +142,7 @@ if modo == "Casal":
             total = despesas["Valor"].sum()
             st.markdown(f"### 💰 Total de Despesas: **€ {total:.2f}**")
         else:
-            st.info("Sem despesas")
+            st.info("Sem despesas neste ciclo")
 
     st.stop()
 
@@ -138,21 +161,18 @@ descricao = ""
 if tipo == "Despesa":
     categoria = st.selectbox("Categoria", ["Renda","Vodafone","Gasolina","Alimentação","Luz","Água","Outros"])
 
-    # 🔥 NOVA REGRA: OUTROS OBRIGA DESCRIÇÃO
     if categoria == "Outros":
         descricao = st.text_input("Descrição obrigatória")
 
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
-# ❌ bloquear datas futuras
 if data > datetime.today().date():
     st.error("Não podes escolher data futura")
     st.stop()
 
 if st.button("Adicionar"):
 
-    # 🔥 VALIDAÇÃO FORTE
     if tipo == "Despesa" and categoria == "Outros" and descricao.strip() == "":
         st.error("❌ Tens de preencher a descrição quando escolheste 'Outros'")
         st.stop()
