@@ -88,10 +88,7 @@ def get_last_salary(df, pessoa):
     if df_p.empty:
         return None
 
-    return df_p.sort_values(
-        "Data",
-        ascending=False
-    ).iloc[0]["Data"]
+    return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
 
 
 def filtrar_ciclo(df, pessoa):
@@ -109,11 +106,6 @@ def filtrar_ciclo(df, pessoa):
 # DELETE SEGURO
 # =========================
 def delete_row_safe(target_row):
-    fresh_raw = sheet.get_all_values()
-
-    if len(fresh_raw) < target_row:
-        return False
-
     try:
         sheet.delete_rows(int(target_row))
         return True
@@ -127,48 +119,29 @@ def delete_row_safe(target_row):
 def mostrar_dashboard(df_pessoa, pessoa):
     st.markdown(f"## 📈 Dashboard de {pessoa}")
 
-    receitas = df_pessoa[
-        df_pessoa["Tipo"].isin(
-            ["Salário", "Subsídio Alimentação"]
-        )
-    ]
-
-    despesas = df_pessoa[
-        df_pessoa["Tipo"] == "Despesa"
-    ]
+    receitas = df_pessoa[df_pessoa["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
+    despesas = df_pessoa[df_pessoa["Tipo"] == "Despesa"]
 
     total_receitas = receitas["Valor"].sum()
     total_despesas = despesas["Valor"].sum()
-    saldo_atual = total_receitas - total_despesas
+    saldo = total_receitas - total_despesas
 
     maior_categoria = "—"
 
     if not despesas.empty:
-        maior = (
-            despesas.groupby("Categoria")["Valor"]
-            .sum()
-            .sort_values(ascending=False)
-        )
-        if not maior.empty:
-            maior_categoria = maior.index[0]
+        top = despesas.groupby("Categoria")["Valor"].sum().sort_values(ascending=False)
+        if not top.empty:
+            maior_categoria = top.index[0]
 
     c1, c2, c3, c4 = st.columns(4)
 
     c1.metric("💰 Receitas", f"€ {total_receitas:.2f}")
     c2.metric("💸 Despesas", f"€ {total_despesas:.2f}")
-    c3.metric("🏦 Saldo Atual", f"€ {saldo_atual:.2f}")
+    c3.metric("🏦 Saldo", f"€ {saldo:.2f}")
     c4.metric("🔥 Maior Gasto", maior_categoria)
 
     if not despesas.empty:
-        st.markdown("### 📊 Despesas por Categoria")
-
-        grafico = (
-            despesas.groupby("Categoria")["Valor"]
-            .sum()
-            .reset_index()
-        )
-
-        st.bar_chart(grafico.set_index("Categoria"))
+        st.bar_chart(despesas.groupby("Categoria")["Valor"].sum())
 
     st.markdown("---")
 
@@ -183,10 +156,7 @@ avatars = {
 # =========================
 # MODO
 # =========================
-modo = st.sidebar.selectbox(
-    "Modo",
-    ["Casal", "Ruben", "Gabi"]
-)
+modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
 
 # =========================
 # CASAL
@@ -196,12 +166,38 @@ if modo == "Casal":
     st.subheader("📊 Visão Geral")
 
     for pessoa in ["Ruben", "Gabi"]:
-
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
         df_p = filtrar_ciclo(df, pessoa)
-
         mostrar_dashboard(df_p, pessoa)
+
+    # =========================
+    # 📤 EXPORTAÇÃO (SÓ CASAL)
+    # =========================
+    st.markdown("---")
+    st.subheader("📤 Exportação de Dados")
+
+    opcao = st.selectbox(
+        "O que queres exportar?",
+        ["Casal (Tudo)", "Ruben", "Gabi"]
+    )
+
+    if opcao == "Casal (Tudo)":
+        export_df = df.copy()
+    else:
+        export_df = df[df["Pessoa"] == opcao].copy()
+
+    if "sheet_row" in export_df.columns:
+        export_df = export_df.drop(columns=["sheet_row"])
+
+    csv = export_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="⬇️ Descarregar CSV",
+        data=csv,
+        file_name=f"financeiro_{opcao}_{datetime.today().strftime('%Y_%m_%d')}.csv",
+        mime="text/csv"
+    )
 
     st.stop()
 
@@ -211,17 +207,14 @@ if modo == "Casal":
 st.subheader(f"{avatars[modo]} {modo}")
 
 pessoa = modo
-df_pessoal = filtrar_ciclo(df, pessoa)
 
+df_pessoal = filtrar_ciclo(df, pessoa)
 mostrar_dashboard(df_pessoal, pessoa)
 
 # =========================
 # ADICIONAR
 # =========================
-tipo = st.selectbox(
-    "Tipo",
-    ["Salário", "Subsídio Alimentação", "Despesa"]
-)
+tipo = st.selectbox("Tipo", ["Salário", "Subsídio Alimentação", "Despesa"])
 
 categoria = ""
 descricao = ""
@@ -229,15 +222,7 @@ descricao = ""
 if tipo == "Despesa":
     categoria = st.selectbox(
         "Categoria",
-        [
-            "Renda",
-            "Vodafone",
-            "Gasolina",
-            "Alimentação",
-            "Luz",
-            "Água",
-            "Outros"
-        ]
+        ["Renda", "Vodafone", "Gasolina", "Alimentação", "Luz", "Água", "Outros"]
     )
 
     if categoria == "Outros":
@@ -252,29 +237,18 @@ if data > datetime.today().date():
 
 if st.button("Adicionar"):
 
-    if (
-        tipo == "Despesa"
-        and categoria == "Outros"
-        and descricao.strip() == ""
-    ):
-        st.error("❌ Tens de preencher a descrição quando escolheste 'Outros'")
+    if tipo == "Despesa" and categoria == "Outros" and descricao.strip() == "":
+        st.error("❌ Tens de preencher descrição")
         st.stop()
 
-    sheet.append_row([
-        pessoa,
-        tipo,
-        categoria,
-        descricao,
-        float(valor),
-        str(data)
-    ])
+    sheet.append_row([pessoa, tipo, categoria, descricao, float(valor), str(data)])
 
     st.cache_data.clear()
     st.success("Adicionado com sucesso")
     st.rerun()
 
 # =========================
-# 🗑 ELIMINAR
+# ELIMINAR
 # =========================
 st.markdown("---")
 st.subheader("🗑 Eliminar registos")
@@ -285,59 +259,13 @@ for _, row in df_user.iterrows():
 
     c1, c2, c3, c4, c5 = st.columns([2,3,2,2,1])
 
-    c1.write(row.get("Pessoa",""))
-    c2.write(row.get("Tipo",""))
-    c3.write(row.get("Categoria",""))
-    c4.write(f"€ {row.get('Valor',0):.2f}")
+    c1.write(row["Pessoa"])
+    c2.write(row["Tipo"])
+    c3.write(row["Categoria"])
+    c4.write(f"€ {row['Valor']:.2f}")
 
     if c5.button("❌", key=f"del_{row['sheet_row']}"):
-
-        deleted = delete_row_safe(row["sheet_row"])
-
-        if deleted:
+        if delete_row_safe(row["sheet_row"]):
             st.cache_data.clear()
-            st.success("Registo eliminado com sucesso")
+            st.success("Eliminado")
             st.rerun()
-        else:
-            st.error("Não foi possível eliminar o registo")
-
-# =========================
-# 📤 EXPORTAÇÃO (NOVO - PONTO 5)
-# =========================
-st.markdown("---")
-st.subheader("📤 Exportar dados")
-
-export_df = df.copy()
-
-if "sheet_row" in export_df.columns:
-    export_df = export_df.drop(columns=["sheet_row"])
-
-csv = export_df.to_csv(index=False).encode("utf-8")
-
-st.download_button(
-    label="⬇️ Descarregar CSV completo",
-    data=csv,
-    file_name=f"financeiro_{datetime.today().strftime('%Y_%m_%d')}.csv",
-    mime="text/csv"
-)
-
-st.markdown("### 👤 Exportar por pessoa")
-
-pessoa_export = st.selectbox(
-    "Escolhe pessoa",
-    ["Ruben", "Gabi"]
-)
-
-df_pessoa_export = df[df["Pessoa"] == pessoa_export].copy()
-
-if "sheet_row" in df_pessoa_export.columns:
-    df_pessoa_export = df_pessoa_export.drop(columns=["sheet_row"])
-
-csv_pessoa = df_pessoa_export.to_csv(index=False).encode("utf-8")
-
-st.download_button(
-    label=f"⬇️ Descarregar CSV de {pessoa_export}",
-    data=csv_pessoa,
-    file_name=f"{pessoa_export}_financeiro_{datetime.today().strftime('%Y_%m_%d')}.csv",
-    mime="text/csv"
-)
