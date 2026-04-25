@@ -32,18 +32,9 @@ try:
         "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
     ).sheet1
 
-    # =========================
-    # CATEGORIAS (SEGURAS)
-    # =========================
-    try:
-        cat_sheet = client.open_by_key(
-            "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-        ).worksheet("Categorias")
-
-    except Exception:
-        st.error("❌ A aba 'Categorias' não existe no Google Sheets.")
-        st.info("👉 Cria uma nova folha com o nome EXATO: Categorias")
-        st.stop()
+    cat_sheet = client.open_by_key(
+        "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
+    ).worksheet("Categorias")
 
 except Exception as e:
     st.error(f"❌ Erro ao ligar ao Google Sheets: {e}")
@@ -52,7 +43,7 @@ except Exception as e:
 # =========================
 # CATEGORIAS
 # =========================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=10)
 def load_categories():
     data = cat_sheet.get_all_values()
 
@@ -60,6 +51,19 @@ def load_categories():
         return []
 
     return [row[0] for row in data[1:] if row[0].strip() != ""]
+
+def add_category(cat):
+    cat_sheet.append_row([cat])
+
+def delete_category(cat):
+    data = cat_sheet.get_all_values()
+
+    for i, row in enumerate(data):
+        if i == 0:
+            continue
+        if row[0] == cat:
+            cat_sheet.delete_rows(i + 1)
+            break
 
 categories = load_categories()
 
@@ -115,6 +119,38 @@ def delete_row_safe(row):
         return False
 
 # =========================
+# SIDEBAR - GESTÃO DE CATEGORIAS
+# =========================
+st.sidebar.markdown("## ⚙️ Categorias")
+
+with st.sidebar.expander("➕ Adicionar categoria"):
+
+    nova_cat = st.text_input("Nova categoria")
+
+    if st.button("Adicionar"):
+        if nova_cat.strip() != "":
+            add_category(nova_cat.strip())
+            st.cache_data.clear()
+            st.success("Categoria adicionada")
+            st.rerun()
+
+with st.sidebar.expander("❌ Remover categoria"):
+
+    if categories:
+        cat_del = st.selectbox("Escolhe categoria", categories)
+
+        if st.button("Remover"):
+            delete_category(cat_del)
+            st.cache_data.clear()
+            st.success("Categoria removida")
+            st.rerun()
+    else:
+        st.info("Sem categorias disponíveis")
+
+with st.sidebar.expander("📋 Categorias atuais"):
+    st.write(categories)
+
+# =========================
 # MODO
 # =========================
 modo = st.sidebar.selectbox("Modo", ["Casal", "Ruben", "Gabi"])
@@ -132,6 +168,7 @@ if modo == "Casal":
     st.subheader("📊 Visão Geral")
 
     for pessoa in ["Ruben", "Gabi"]:
+
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
         df_p = df[df["Pessoa"] == pessoa]
@@ -166,7 +203,7 @@ if tipo == "Despesa":
     if categories:
         categoria = st.selectbox("Categoria", categories)
     else:
-        categoria = st.text_input("Categoria (cria na aba 'Categorias')")
+        categoria = st.text_input("Categoria")
 
     descricao = st.text_input("Descrição")
 
