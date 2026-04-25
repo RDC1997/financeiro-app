@@ -31,7 +31,7 @@ try:
     sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").sheet1
     cat_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Categorias")
 
-    # METAS
+    # METAS SHEET
     try:
         goal_sheet = client.open_by_key("1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME").worksheet("Metas")
     except:
@@ -43,7 +43,7 @@ except Exception as e:
     st.stop()
 
 # =========================
-# CATEGORIAS (INTACTO)
+# CATEGORIAS (COM UI RESTAURADA)
 # =========================
 @st.cache_data(ttl=10)
 def load_categories():
@@ -67,7 +67,35 @@ def delete_category(cat):
 categories = load_categories()
 
 # =========================
-# DATA (INTACTO)
+# SIDEBAR CATEGORIAS (RESTAURO TOTAL)
+# =========================
+st.sidebar.markdown("## ⚙️ Categorias")
+
+with st.sidebar.expander("➕ Adicionar categoria"):
+    new_cat = st.text_input("Nova categoria")
+
+    if st.button("Adicionar categoria"):
+        if new_cat.strip():
+            add_category(new_cat.strip())
+            st.cache_data.clear()
+            st.rerun()
+
+with st.sidebar.expander("❌ Remover categoria"):
+    if categories:
+        cat_del = st.selectbox("Escolhe categoria", categories)
+
+        if st.button("Remover categoria"):
+            delete_category(cat_del)
+            st.cache_data.clear()
+            st.rerun()
+    else:
+        st.info("Sem categorias disponíveis")
+
+with st.sidebar.expander("📋 Ver categorias"):
+    st.write(categories)
+
+# =========================
+# DATA
 # =========================
 @st.cache_data(ttl=30)
 def load_data():
@@ -104,12 +132,6 @@ def load_goals():
     data = goal_sheet.get_all_records()
     return pd.DataFrame(data)
 
-def update_goal(row, value):
-    goal_sheet.update_cell(row, 3, value)
-
-def delete_goal(row):
-    goal_sheet.delete_rows(row)
-
 goals = load_goals()
 
 # =========================
@@ -124,7 +146,7 @@ def delete_row_safe(row):
         return False
 
 # =========================
-# SIDEBAR
+# MENU
 # =========================
 modo = st.sidebar.selectbox("Modo", ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"])
 
@@ -136,10 +158,10 @@ if modo == "Metas 🎯":
     st.subheader("🎯 Metas Financeiras")
 
     with st.expander("➕ Criar meta"):
-        nome = st.text_input("Nome")
+        nome = st.text_input("Nome da meta")
         objetivo = st.number_input("Objetivo (€)", min_value=0.0)
 
-        if st.button("Criar"):
+        if st.button("Criar meta"):
             goal_sheet.append_row([nome, objetivo, 0])
             st.rerun()
 
@@ -166,27 +188,24 @@ if modo == "Metas 🎯":
 
         col1, col2 = st.columns(2)
 
-        add = col1.number_input("Adicionar", min_value=0.0, key=f"a{i}")
+        add = col1.number_input("Adicionar dinheiro", min_value=0.0, key=f"a{i}")
 
-        if col1.button("Adicionar dinheiro", key=f"b{i}"):
+        if col1.button("Adicionar", key=f"b{i}"):
             goal_sheet.update_cell(i+2, 3, atual + add)
             st.rerun()
 
         if col2.button("Eliminar", key=f"c{i}"):
-            delete_goal(i+2)
+            goal_sheet.delete_rows(i+2)
             st.rerun()
 
     st.stop()
 
 # =========================
-# CASAL / RUBEN / GABI (RESTAURADO)
+# CASAL / RUBEN / GABI
 # =========================
-avatars = {
-    "Ruben": "🤴",
-    "Gabi": "👸"
-}
+avatars = {"Ruben":"🤴","Gabi":"👸"}
 
-st.subheader(f"{avatars.get(modo.split()[0], '👨‍❤️‍👩')} {modo}")
+st.subheader(f"{avatars.get(modo.split()[0],'👨‍❤️‍👩')} {modo}")
 
 pessoa = modo.split()[0]
 
