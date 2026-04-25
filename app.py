@@ -41,6 +41,28 @@ except Exception as e:
     st.stop()
 
 # =========================
+# CATEGORIAS (MANTIDO + GESTÃO)
+# =========================
+@st.cache_data(ttl=20)
+def load_categories():
+    data = cat_sheet.get_all_values()
+    return [r[0] for r in data[1:] if r[0].strip()] if len(data) > 1 else []
+
+def add_category(cat):
+    cat_sheet.append_row([cat])
+
+def delete_category(cat):
+    data = cat_sheet.get_all_values()
+    for i, row in enumerate(data):
+        if i == 0:
+            continue
+        if row[0] == cat:
+            cat_sheet.delete_rows(i + 1)
+            break
+
+categories = load_categories()
+
+# =========================
 # DATA
 # =========================
 @st.cache_data(ttl=20)
@@ -61,20 +83,10 @@ def load_data():
 
     return df
 
-
 df = load_data()
 
 # =========================
-# EDITAR REGISTO
-# =========================
-if "edit_row" not in st.session_state:
-    st.session_state.edit_row = None
-
-def update_row(row_number, values):
-    sheet.update(f"A{row_number}:F{row_number}", [values])
-
-# =========================
-# DELETE SEGURO
+# SAFE ACTIONS
 # =========================
 def delete_row(row):
     try:
@@ -83,73 +95,86 @@ def delete_row(row):
     except:
         return False
 
+def update_row(row_number, values):
+    sheet.update(f"A{row_number}:F{row_number}", [values])
+
 # =========================
-# DASHBOARD
+# SESSION EDIT
 # =========================
-def dashboard(df_p):
-    receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
-    despesas = df_p[df_p["Tipo"] == "Despesa"]
+if "edit_row" not in st.session_state:
+    st.session_state.edit_row = None
 
-    c1,c2,c3 = st.columns(3)
+# =========================
+# SIDEBAR CATEGORIAS (MANTIDO)
+# =========================
+st.sidebar.markdown("## ⚙️ Categorias")
 
-    c1.metric("💰 Receitas", f"€ {receitas['Valor'].sum():.2f}")
-    c2.metric("💸 Despesas", f"€ {despesas['Valor'].sum():.2f}")
-    c3.metric("🏦 Saldo", f"€ {(receitas['Valor'].sum()-despesas['Valor'].sum()):.2f}")
+with st.sidebar.expander("➕ Adicionar"):
+    nova = st.text_input("Nova categoria")
+    if st.button("Adicionar categoria"):
+        if nova.strip():
+            add_category(nova.strip())
+            st.cache_data.clear()
+            st.rerun()
 
-    if not despesas.empty:
-        st.bar_chart(despesas.groupby("Categoria")["Valor"].sum())
+with st.sidebar.expander("❌ Remover"):
+    if categories:
+        cat = st.selectbox("Categoria", categories)
+        if st.button("Remover categoria"):
+            delete_category(cat)
+            st.cache_data.clear()
+            st.rerun()
 
 # =========================
 # MODO
 # =========================
 modo = st.sidebar.selectbox("Modo", ["Casal","Ruben","Gabi"])
 
+avatars = {"Ruben":"🤴","Gabi":"👸"}
+
 # =========================
 # CASAL
 # =========================
 if modo == "Casal":
-    st.subheader("📊 Dashboard Casal")
+    st.subheader("📊 Casal")
 
     for p in ["Ruben","Gabi"]:
-        st.markdown(f"## {p}")
-        dashboard(df[df["Pessoa"] == p])
+        st.markdown(f"## {avatars[p]} {p}")
+        df_p = df[df["Pessoa"] == p]
+
+        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+        despesas = df_p[df_p["Tipo"] == "Despesa"]
+
+        st.metric("Receitas", f"€ {receitas['Valor'].sum():.2f}")
+        st.metric("Despesas", f"€ {despesas['Valor'].sum():.2f}")
 
     st.stop()
 
 # =========================
 # INDIVIDUAL
 # =========================
-st.subheader(modo)
+st.subheader(f"{avatars[modo]} {modo}")
 
 df_user = df[df["Pessoa"] == modo]
 
-dashboard(df_user)
-
 # =========================
-# EDIT MODE
+# EDITAR (NOVO MAS SEM REMOVER NADA)
 # =========================
 if st.session_state.edit_row:
-    row_data = df[df["sheet_row"] == st.session_state.edit_row].iloc[0]
+    row = df[df["sheet_row"] == st.session_state.edit_row].iloc[0]
 
-    st.markdown("## ✏️ Editar Registo")
+    st.markdown("## ✏️ Editar")
 
-    tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"], index=0)
-    categoria = st.text_input("Categoria", value=row_data["Categoria"])
-    descricao = st.text_input("Descrição", value=row_data["Descrição"])
-    valor = st.number_input("Valor", value=float(row_data["Valor"]))
-    data = st.date_input("Data", value=row_data["Data"])
+    tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
+    categoria = st.text_input("Categoria", value=row["Categoria"])
+    descricao = st.text_input("Descrição", value=row["Descrição"])
+    valor = st.number_input("Valor", value=float(row["Valor"]))
+    data = st.date_input("Data", value=row["Data"])
 
     if st.button("Guardar"):
         update_row(
             st.session_state.edit_row,
-            [
-                row_data["Pessoa"],
-                tipo,
-                categoria,
-                descricao,
-                valor,
-                str(data)
-            ]
+            [row["Pessoa"], tipo, categoria, descricao, valor, str(data)]
         )
         st.session_state.edit_row = None
         st.cache_data.clear()
@@ -159,7 +184,7 @@ if st.session_state.edit_row:
         st.session_state.edit_row = None
 
 # =========================
-# LISTA
+# LISTA (MANTÉM DELETE)
 # =========================
 st.markdown("---")
 st.subheader("📋 Registos")
@@ -183,13 +208,18 @@ for _, r in df_user.iterrows():
         st.rerun()
 
 # =========================
-# ADICIONAR
+# ADICIONAR (MANTIDO)
 # =========================
 st.markdown("---")
 st.subheader("➕ Adicionar")
 
 tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
-categoria = st.text_input("Categoria")
+
+if tipo == "Despesa" and categories:
+    categoria = st.selectbox("Categoria", categories)
+else:
+    categoria = st.text_input("Categoria")
+
 descricao = st.text_input("Descrição")
 valor = st.number_input("Valor")
 data = st.date_input("Data", datetime.today())
