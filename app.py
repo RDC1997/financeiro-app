@@ -44,6 +44,13 @@ if 'filtros' not in st.session_state:
 # =========================
 def refresh():
     st.cache_data.clear()
+    # Limpar cache específico
+    load_data.clear()
+    load_categories.clear()
+    try:
+        load_goals.clear()
+    except:
+        pass
     st.rerun()
 
 def generate_id():
@@ -61,6 +68,10 @@ def export_to_excel(df):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Dados')
     return output.getvalue()
+
+# Contador de chamadas API (para debug)
+if 'api_calls' not in st.session_state:
+    st.session_state.api_calls = 0
 
 # =========================
 # GOOGLE SHEETS
@@ -97,13 +108,15 @@ except Exception as e:
 # =========================
 # CATEGORIAS
 # =========================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)  # Cache por 5 minutos
 def load_categories():
     data = cat_sheet.get_all_values()
     return [row[0] for row in data[1:] if row[0].strip() != ""]
 
 def add_category(cat):
     cat_sheet.append_row([cat])
+    # Limpar cache após adicionar
+    load_categories.clear()
 
 def delete_category(cat):
     data = cat_sheet.get_all_values()
@@ -113,13 +126,15 @@ def delete_category(cat):
         if row[0] == cat:
             cat_sheet.delete_rows(i + 1)
             break
+    # Limpar cache após eliminar
+    load_categories.clear()
 
 categories = load_categories()
 
 # =========================
 # DATA
 # =========================
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)  # Cache por 5 minutos
 def load_data():
     raw = sheet.get_all_values()
     cols = ["ID","Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
@@ -261,8 +276,10 @@ if modo == "Casal 👨‍❤️‍👩":
 
         with st.expander("💰 Receitas"):
             if not receitas.empty:
+                cols_to_show = [c for c in ["ID"] if c in receitas.columns]
+                df_show = receitas.drop(columns=cols_to_show)
                 st.dataframe(
-                    receitas.drop(columns=[c for c in ["ID"] if c in receitas.columns]),
+                    df_show,
                     use_container_width=True
                 )
             else:
@@ -270,8 +287,11 @@ if modo == "Casal 👨‍❤️‍👩":
 
         with st.expander("💸 Despesas"):
             if not despesas.empty:
+                # Mostrar também a descrição se existir
+                cols_to_show = [c for c in ["ID"] if c in despesas.columns]
+                df_show = despesas.drop(columns=cols_to_show)
                 st.dataframe(
-                    despesas.drop(columns=[c for c in ["ID"] if c in despesas.columns]),
+                    df_show,
                     use_container_width=True
                 )
             else:
@@ -281,7 +301,10 @@ if modo == "Casal 👨‍❤️‍👩":
             if not df_p.empty:
                 st.warning("⚠️ Clique no botão para eliminar um registo")
                 
-                for idx, (_, row) in enumerate(df_p.iterrows()):
+                # Mostrar apenas últimos 10 registos para evitar muitas linhas
+                df_p_limited = df_p.tail(10)
+                
+                for idx, (_, row) in enumerate(df_p_limited.iterrows()):
                     with st.container():
                         c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 1])
                         
@@ -304,6 +327,7 @@ if modo == "Casal 👨‍❤️‍👩":
                                         break
                                 
                                 st.session_state.confirm_delete = None
+                                load_data.clear()  # Limpar cache
                                 refresh()
                             
                             if col_cancel.button("✗", key=f"cancel_{row['ID']}"):
@@ -329,6 +353,7 @@ if modo == "Metas 🎯":
 
     st.subheader("🎯 Metas")
 
+    @st.cache_data(ttl=300)
     def load_goals():
         raw = goal_sheet.get_all_values()
         return pd.DataFrame(raw[1:], columns=raw[0]) if len(raw) > 1 else pd.DataFrame()
@@ -516,16 +541,26 @@ categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
+    # Adicionar "Outros" à lista de categorias se não existir
+    todas_categorias = categories + ["Outros"] if categories else ["Outros"]
     categoria = st.selectbox(
         "Categoria", 
-        categories if categories else ["Outros"],
+        todas_categorias,
         key="cat_select"
     )
-    descricao = st.text_input(
-        "Descrição", 
-        value=st.session_state.inputs.get('descricao', ''),
-        key="desc_input"
-    )
+    
+    # Só mostrar descrição quando selecionar "Outros"
+    if categoria == "Outros":
+        descricao = st.text_input(
+            "Descrição (especifique)", 
+            value=st.session_state.inputs.get('descricao', ''),
+            key="desc_input"
+        )
+    else:
+        # Limpar descrição se não for "Outros"
+        descricao = ""
+        if 'descricao' in st.session_state.inputs:
+            st.session_state.inputs['descricao'] = ''
 
 valor = st.number_input(
     "Valor (€)", 
@@ -545,7 +580,7 @@ if valor <= 0:
 if tipo == "Despesa" and not categoria:
     erros.append("Selecione uma categoria")
 
-if tipo == "Despesa" and not descricao.strip():
+if tipo == "Despesa" and categoria == "Outros" and not descricao.strip():
     erros.append("Adicione uma descrição")
 
 if erros:
@@ -553,7 +588,7 @@ if erros:
         st.error(erro)
 
 if st.button("Adicionar", key="adicionar"):
-    if valor > 0 and (tipo != "Despesa" or (categoria and descricao.strip())):
+    if valor > 0 and (tipo != "Despesa" or (categoria and (categoria != "Outros" or descricao.strip()))):
         sheet.append_row([
             generate_id(),
             pessoa,
@@ -564,8 +599,12 @@ if st.button("Adicionar", key="adicionar"):
             str(data)
         ])
         reset_inputs()
+        # Limpar cache antes de atualizar
+        load_data.clear()
         refresh()
     else:
         st.error("Por favor, preencha todos os campos corretamente")
 
-st.success("✅ Pronto para adicionar registos")
+# Info de cache (debug opcional)
+with st.sidebar.expander("ℹ️ Info"):
+    st.caption("Dados em cache por 5 minutos para evitar exceder limites da API Google")
