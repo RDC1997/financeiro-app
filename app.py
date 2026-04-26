@@ -419,7 +419,7 @@ if modo == "Metas 🎯":
 # =========================
 if modo == "Análises 📊":
 
-    st.subheader("📊 Análises e Gráficos")
+    st.subheader("📊 Resumo Financeiro")
 
     df_analise = df_filtrado.copy()
     
@@ -439,121 +439,64 @@ if modo == "Análises 📊":
         st.warning("⚠️ Erro ao processar datas")
         st.stop()
 
-    # Despesas por categoria
+    # Separar receitas e despesas
+    receitas = df_analise[df_analise["Tipo"].isin(["Salário","Subsídio Alimentação"])]
     despesas = df_analise[df_analise["Tipo"] == "Despesa"]
+
+    # === RESUMO GERAL ===
+    st.markdown("### 💰 Resumo do Período")
     
+    col1, col2, col3 = st.columns(3)
+    
+    total_receitas = receitas['Valor'].sum()
+    total_despesas = despesas['Valor'].sum()
+    saldo = total_receitas - total_despesas
+    
+    col1.metric("Total Receitas", f"{total_receitas:,.2f} €")
+    col2.metric("Total Despesas", f"{total_despesas:,.2f} €")
+    col3.metric("Saldo", f"{saldo:,.2f} €", 
+                delta=f"{saldo:,.2f} €" if saldo >= 0 else f"{saldo:,.2f} €",
+                delta_color="normal" if saldo >= 0 else "inverse")
+
+    st.markdown("---")
+
+    # === DESPESAS POR CATEGORIA ===
     if not despesas.empty:
-        st.markdown("### 🍰 Despesas por Categoria")
-        fig_pie = px.pie(
-            despesas, 
-            values='Valor', 
-            names='Categoria',
-            hole=0.4,
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.markdown("### 🍰 Onde gastaste o dinheiro?")
         
-        # Tabela de despesas por categoria
-        despesa_categoria = despesas.groupby('Categoria')['Valor'].sum().reset_index()
-        despesa_categoria = despesa_categoria.sort_values('Valor', ascending=False)
-        st.dataframe(
-            despesa_categoria.assign(Percentual=lambda x: (x['Valor'] / x['Valor'].sum() * 100).round(1).astype(str) + '%'),
-            use_container_width=True
-        )
-
-    st.markdown("---")
-
-    # Evolução mensal
-    st.markdown("### 📈 Evolução Mensal")
-    
-    # Verificar se há datas válidas
-    df_com_data = df_analise[df_analise['Data'].notna()]
-    
-    if not df_com_data.empty:
-        df_com_data = df_com_data.copy()
-        df_com_data['Ano_Mes'] = df_com_data['Data'].dt.to_period('M')
-        mensal = df_com_data.groupby(['Ano_Mes', 'Pessoa'])['Valor'].sum().reset_index()
-        mensal['Ano_Mes'] = mensal['Ano_Mes'].astype(str)
+        despesa_categoria = despesas.groupby('Categoria')['Valor'].sum().sort_values(ascending=False)
         
-        if not mensal.empty:
-            fig_line = px.line(
-                mensal, 
-                x='Ano_Mes', 
-                y='Valor', 
-                color='Pessoa',
-                markers=True
-            )
-            st.plotly_chart(fig_line, use_container_width=True)
-        else:
-            st.info("Sem dados suficientes para evolução mensal")
-    else:
-        st.info("Sem dados de data válidos para evolução mensal")
+        # Mostrar como lista simples
+        for cat, valor in despesa_categoria.items():
+            pct = (valor / total_despesas * 100) if total_despesas > 0 else 0
+            st.write(f"• **{cat}**: {valor:,.2f} € ({pct:.1f}%)")
 
     st.markdown("---")
 
-    # Comparação Ruben vs Gabi
-    st.markdown("### ⚖️ Comparação Ruben vs Gabi")
+    # === ÚLTIMOS REGISTOS ===
+    st.markdown("### 📋 Últimos Registos")
     
-    comparacao = df_analise.groupby('Pessoa').agg({
-        'Valor': ['sum', 'count']
-    }).reset_index()
-    comparacao.columns = ['Pessoa', 'Total', 'Registos']
+    ultimos = df_analise.sort_values('Data', ascending=False).head(10)
     
-    if not comparacao.empty:
-        fig_bar = px.bar(
-            comparacao, 
-            x='Pessoa', 
-            y='Total',
-            color='Pessoa',
-            text='Total'
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
-        st.dataframe(comparacao, use_container_width=True)
+    if not ultimos.empty:
+        # Simplificar a tabela
+        cols_show = ['Pessoa', 'Tipo', 'Categoria', 'Valor', 'Data']
+        cols_exist = [c for c in cols_show if c in ultimos.columns]
+        st.dataframe(ultimos[cols_exist], use_container_width=True)
 
     st.markdown("---")
 
-    # Estatísticas
-    st.markdown("### 📉 Estatísticas")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    total_receitas = df_analise[df_analise["Tipo"].isin(["Salário","Subsídio Alimentação"])]['Valor'].sum()
-    total_despesas = df_analise[df_analise["Tipo"] == "Despesa"]['Valor'].sum()
-    media_despesa = despesas['Valor'].mean() if not despesas.empty else 0
-    maior_despesa = despesas['Valor'].max() if not despesas.empty else 0
-    
-    col1.metric("Total Receitas", f"{total_receitas:.2f} €")
-    col2.metric("Total Despesas", f"{total_despesas:.2f} €")
-    col3.metric("Média Despesa", f"{media_despesa:.2f} €")
-    col4.metric("Maior Despesa", f"{maior_despesa:.2f} €")
-
-    st.markdown("---")
-
-    # Exportar
+    # === EXPORTAR ===
     st.markdown("### 📥 Exportar Dados")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        try:
-            excel_data = export_to_excel(df_analise)
-            st.download_button(
-                label="📊 Exportar para Excel",
-                data=excel_data,
-                file_name="finance_app_export.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        except:
-            st.warning("Excel não disponível, use CSV")
-    
-    with col2:
-        csv = df_analise.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📄 Exportar para CSV",
-            data=csv,
-            file_name="finance_app_export.csv",
-            mime="text/csv"
-        )
+    csv = df_analise.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📄 Descarregar CSV",
+        data=csv,
+        file_name="finance_app_export.csv",
+        mime="text/csv",
+        key="export_csv"
+    )
 
     st.stop()
 
