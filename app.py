@@ -138,7 +138,7 @@ with st.sidebar.expander("📋 Ver categorias"):
     st.write(categories)
 
 # =========================
-# CASAL + ALERTAS PRO
+# CASAL
 # =========================
 if modo == "Casal 👨‍❤️‍👩":
 
@@ -180,33 +180,6 @@ if modo == "Casal 👨‍❤️‍👩":
         st.markdown("### 💸 Despesas")
         st.dataframe(despesas, use_container_width=True)
 
-        st.markdown("### 🧠 Análise do ciclo")
-
-        if saldo < 0:
-            st.error("⚠️ Estás em défice neste ciclo.")
-        else:
-            taxa = (saldo / total_receitas * 100) if total_receitas > 0 else 0
-
-            if taxa < 10:
-                st.warning("⚠️ Poupança baixa")
-            elif taxa < 25:
-                st.info("📊 Equilibrado")
-            else:
-                st.success("🟢 Excelente")
-
-        st.markdown("### 🚨 Alertas PRO")
-
-        if total_despesas > total_receitas:
-            st.error("🚨 Gastas mais do que ganhas!")
-
-        elif total_despesas > 0.8 * total_receitas:
-            st.warning("⚠️ Quase no limite")
-
-        if not despesas.empty:
-            cat_sum = despesas.groupby("Categoria")["Valor"].sum()
-            if (cat_sum.max() / total_despesas) > 0.4:
-                st.warning("⚠️ Uma categoria domina os gastos")
-
         st.markdown("#### 🗑 Eliminar registos")
 
         for _, row in df_p.iterrows():
@@ -232,7 +205,7 @@ if modo == "Casal 👨‍❤️‍👩":
     st.stop()
 
 # =========================
-# METAS
+# METAS (sem empty table)
 # =========================
 if modo == "Metas 🎯":
 
@@ -255,12 +228,12 @@ if modo == "Metas 🎯":
     if goals.empty:
         st.info("Ainda não existem metas criadas.")
     else:
-        st.dataframe(goals)
+        st.dataframe(goals, use_container_width=True)
 
     st.stop()
 
 # =========================
-# INDIVIDUAL
+# INDIVIDUAL (COM DESPESA CORRIGIDA)
 # =========================
 pessoa = modo.split()[0]
 
@@ -272,14 +245,12 @@ categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
-    # 🔥 FIX: "Outros" aparece SEMPRE
-    categoria = st.selectbox(
-        "Categoria",
-        (categories + ["Outros"]) if categories else ["Outros"]
-    )
+    categoria = st.selectbox("Categoria", categories + ["Outros"] if categories else ["Outros"])
 
     if categoria == "Outros":
-        descricao = st.text_input("Descrição obrigatória")
+        descricao = st.text_input("Descrição (obrigatória)")
+    else:
+        descricao = ""
 
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
@@ -287,7 +258,7 @@ data = st.date_input("Data", datetime.today())
 if st.button("Adicionar"):
 
     if tipo == "Despesa" and categoria == "Outros" and descricao.strip() == "":
-        st.error("❌ Tens de preencher a descrição em 'Outros'")
+        st.error("Tens de preencher a descrição.")
         st.stop()
 
     sheet.append_row([
@@ -299,5 +270,34 @@ if st.button("Adicionar"):
         float(valor),
         str(data)
     ])
-
     refresh()
+
+# =========================
+# DELETE REGISTOS (RESTAURO FIX)
+# =========================
+st.markdown("---")
+st.subheader("🗑 Registos")
+
+df_user = df[df["Pessoa"] == pessoa]
+
+for _, row in df_user.iterrows():
+
+    c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
+
+    c1.write(row["Pessoa"])
+    c2.write(row["Tipo"])
+    c3.write(row["Categoria"])
+    c4.write(row["Valor"])
+
+    if c5.button("❌", key=row["ID"]):
+
+        data = sheet.get_all_values()
+        headers = data[0]
+        id_index = headers.index("ID")
+
+        for i, r in enumerate(data[1:], start=2):
+            if r[id_index] == row["ID"]:
+                sheet.delete_rows(i)
+                break
+
+        refresh()
