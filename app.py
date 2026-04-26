@@ -162,7 +162,7 @@ df = load_data()
 # =========================
 modo = st.sidebar.selectbox(
     "Modo",
-    ["Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯","Análises 📊"]
+    ["Início 🏠","Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯","Análises 📊"]
 )
 
 avatars = {"Ruben":"🤴","Gabi":"👸"}
