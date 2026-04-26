@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import uuid
+import time
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
@@ -188,7 +189,14 @@ with st.sidebar.expander("❌ Remover categoria"):
             refresh()
 
 with st.sidebar.expander("📋 Ver categorias"):
-    st.write(categories if categories else "Sem categorias")
+    if categories:
+        # Contagem de registos por categoria
+        contagem = df[df["Tipo"] == "Despesa"].groupby('Categoria').size()
+        for cat in categories:
+            qtd = contagem.get(cat, 0)
+            st.write(f"• {cat}: {qtd} registos")
+    else:
+        st.write("Sem categorias")
 
 # =========================
 # FILTROS
@@ -418,6 +426,30 @@ if modo == "Metas 🎯":
                         refresh()
             else:
                 st.error("Selecione uma meta e adicione um valor")
+        
+        # Eliminar meta
+        st.markdown("---")
+        st.markdown("### 🗑 Eliminar Meta")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            meta_eliminar = st.selectbox("Selecionar meta para eliminar", goals['Meta'].tolist() if not goals.empty else [], key="meta_del_select")
+        with col2:
+            st.write("")  # Espaço vazio
+        
+        if st.button("Eliminar Meta", key="del_meta_btn"):
+            if meta_eliminar:
+                data = goal_sheet.get_all_values()
+                for i, row in enumerate(data):
+                    if i == 0:
+                        continue
+                    if row[0] == meta_eliminar:
+                        goal_sheet.delete_rows(i + 1)
+                        st.success("✅ Meta eliminada!")
+                        time.sleep(1)
+                        refresh()
+            else:
+                st.error("Selecione uma meta para eliminar")
 
     st.stop()
 
@@ -554,13 +586,16 @@ valor = st.number_input(
 
 # Data máxima = hoje (não permite datas futuras)
 data_max = datetime.today().date()
-data = st.date_input("Data", datetime.today(), key="data_input", max_val=data_max)
+data = st.date_input("Data", datetime.today(), key="data_input")
 
 # Validação
 erros = []
 
 if valor <= 0:
     erros.append("O valor deve ser maior que 0")
+
+if valor > 10000:
+    st.warning("⚠️ Valor elevado! Confirme que está correto.")
 
 if tipo == "Despesa" and not categoria:
     erros.append("Selecione uma categoria")
@@ -586,6 +621,8 @@ if st.button("Adicionar", key="adicionar"):
         reset_inputs()
         # Limpar cache antes de atualizar
         load_data.clear()
+        st.success("✅ Registado com sucesso!")
+        time.sleep(1)
         refresh()
     else:
         st.error("Por favor, preencha todos os campos corretamente")
