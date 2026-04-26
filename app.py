@@ -64,10 +64,14 @@ def reset_inputs():
     }
 
 def export_to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Dados')
-    return output.getvalue()
+    try:
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Dados')
+        return output.getvalue()
+    except Exception as e:
+        # Fallback: retornar CSV se Excel falhar
+        return df.to_csv(index=False).encode('utf-8')
 
 # Contador de chamadas API (para debug)
 if 'api_calls' not in st.session_state:
@@ -531,12 +535,16 @@ if modo == "Análises 📊":
     col1, col2 = st.columns(2)
     
     with col1:
-        st.download_button(
-            label="📊 Exportar para Excel",
-            data=export_to_excel(df_analise),
-            file_name="finance_app_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        try:
+            excel_data = export_to_excel(df_analise)
+            st.download_button(
+                label="📊 Exportar para Excel",
+                data=excel_data,
+                file_name="finance_app_export.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        except:
+            st.warning("Excel não disponível, use CSV")
     
     with col2:
         csv = df_analise.to_csv(index=False).encode('utf-8')
