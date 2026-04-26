@@ -176,7 +176,12 @@ with st.sidebar.expander("📋 Ver categorias"):
 st.sidebar.markdown("---")
 st.sidebar.markdown("## 🔍 Filtros")
 
-anos_disponiveis = sorted(df["Data"].dt.year.unique().tolist(), reverse=True) if not df.empty else [datetime.now().year]
+# Verificar se há dados válidos
+try:
+    anos_disponiveis = sorted(df["Data"].dt.year.unique().tolist(), reverse=True) if not df.empty and "Data" in df.columns else [datetime.now().year]
+except:
+    anos_disponiveis = [datetime.now().year]
+
 meses = ["Todos", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
 filtro_ano = st.sidebar.selectbox("Ano", ["Todos"] + anos_disponiveis, key="filtro_ano")
