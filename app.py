@@ -423,6 +423,18 @@ if modo == "Análises 📊":
         st.info("Sem dados para analisar")
         st.stop()
 
+    # Verificar se a coluna Data existe e é válida
+    if 'Data' not in df_analise.columns or df_analise['Data'].isna().all():
+        st.warning("⚠️ Sem dados de data válidos para análises")
+        st.stop()
+    
+    # Converter Data para datetime se necessário
+    try:
+        df_analise['Data'] = pd.to_datetime(df_analise['Data'], errors='coerce')
+    except:
+        st.warning("⚠️ Erro ao processar datas")
+        st.stop()
+
     # Despesas por categoria
     despesas = df_analise[df_analise["Tipo"] == "Despesa"]
     
@@ -450,19 +462,28 @@ if modo == "Análises 📊":
     # Evolução mensal
     st.markdown("### 📈 Evolução Mensal")
     
-    df_analise['Ano_Mes'] = df_analise['Data'].dt.to_period('M')
-    mensal = df_analise.groupby(['Ano_Mes', 'Pessoa'])['Valor'].sum().reset_index()
-    mensal['Ano_Mes'] = mensal['Ano_Mes'].astype(str)
+    # Verificar se há datas válidas
+    df_com_data = df_analise[df_analise['Data'].notna()]
     
-    if not mensal.empty:
-        fig_line = px.line(
-            mensal, 
-            x='Ano_Mes', 
-            y='Valor', 
-            color='Pessoa',
-            markers=True
-        )
-        st.plotly_chart(fig_line, use_container_width=True)
+    if not df_com_data.empty:
+        df_com_data = df_com_data.copy()
+        df_com_data['Ano_Mes'] = df_com_data['Data'].dt.to_period('M')
+        mensal = df_com_data.groupby(['Ano_Mes', 'Pessoa'])['Valor'].sum().reset_index()
+        mensal['Ano_Mes'] = mensal['Ano_Mes'].astype(str)
+        
+        if not mensal.empty:
+            fig_line = px.line(
+                mensal, 
+                x='Ano_Mes', 
+                y='Valor', 
+                color='Pessoa',
+                markers=True
+            )
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("Sem dados suficientes para evolução mensal")
+    else:
+        st.info("Sem dados de data válidos para evolução mensal")
 
     st.markdown("---")
 
