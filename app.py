@@ -12,7 +12,7 @@ from google.oauth2.service_account import Credentials
 # APP
 # =========================
 st.set_page_config(page_title="Rubi&Gabi Finance PRO 2.1", layout="wide")
-st.title("💰 Controlo Financeiro PRO 2.1")
+st.title("💰 Controlo Financeiro ")
 
 # =========================
 # HELPERS
@@ -175,10 +175,20 @@ if modo == "Casal 👨‍❤️‍👩":
         c3.metric("📊 Saldo", f"{saldo:.2f} €")
 
         st.markdown("### 💰 Receitas")
-        st.dataframe(receitas, use_container_width=True)
+
+        # ✅ CORREÇÃO: remove ID da visualização
+        st.dataframe(
+            receitas.drop(columns=[c for c in ["ID"] if c in receitas.columns]),
+            use_container_width=True
+        )
 
         st.markdown("### 💸 Despesas")
-        st.dataframe(despesas, use_container_width=True)
+
+        # ✅ CORREÇÃO: remove ID da visualização
+        st.dataframe(
+            despesas.drop(columns=[c for c in ["ID"] if c in despesas.columns]),
+            use_container_width=True
+        )
 
         st.markdown("#### 🗑 Eliminar registos")
 
@@ -205,7 +215,7 @@ if modo == "Casal 👨‍❤️‍👩":
     st.stop()
 
 # =========================
-# METAS (sem empty table)
+# METAS
 # =========================
 if modo == "Metas 🎯":
 
@@ -233,7 +243,7 @@ if modo == "Metas 🎯":
     st.stop()
 
 # =========================
-# INDIVIDUAL (COM DESPESA CORRIGIDA)
+# INDIVIDUAL
 # =========================
 pessoa = modo.split()[0]
 
@@ -245,22 +255,13 @@ categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
-    categoria = st.selectbox("Categoria", categories + ["Outros"] if categories else ["Outros"])
-
-    if categoria == "Outros":
-        descricao = st.text_input("Descrição (obrigatória)")
-    else:
-        descricao = ""
+    categoria = st.selectbox("Categoria", categories if categories else ["Outros"])
+    descricao = st.text_input("Descrição")
 
 valor = st.number_input("Valor (€)", min_value=0.0)
 data = st.date_input("Data", datetime.today())
 
 if st.button("Adicionar"):
-
-    if tipo == "Despesa" and categoria == "Outros" and descricao.strip() == "":
-        st.error("Tens de preencher a descrição.")
-        st.stop()
-
     sheet.append_row([
         generate_id(),
         pessoa,
@@ -271,33 +272,3 @@ if st.button("Adicionar"):
         str(data)
     ])
     refresh()
-
-# =========================
-# DELETE REGISTOS (RESTAURO FIX)
-# =========================
-st.markdown("---")
-st.subheader("🗑 Registos")
-
-df_user = df[df["Pessoa"] == pessoa]
-
-for _, row in df_user.iterrows():
-
-    c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
-
-    c1.write(row["Pessoa"])
-    c2.write(row["Tipo"])
-    c3.write(row["Categoria"])
-    c4.write(row["Valor"])
-
-    if c5.button("❌", key=row["ID"]):
-
-        data = sheet.get_all_values()
-        headers = data[0]
-        id_index = headers.index("ID")
-
-        for i, r in enumerate(data[1:], start=2):
-            if r[id_index] == row["ID"]:
-                sheet.delete_rows(i)
-                break
-
-        refresh()
