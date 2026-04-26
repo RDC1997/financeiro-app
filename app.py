@@ -53,7 +53,7 @@ try:
         goal_sheet = client.open_by_key(SHEET_ID).worksheet("Metas")
     except:
         goal_sheet = client.open_by_key(SHEET_ID).add_worksheet("Metas", 100, 3)
-        goal_sheet.append_row(["Meta","Objetivo","Atual"])
+        goal_sheet.append_row(["Meta", "Objetivo", "Atual"])
 
 except Exception as e:
     st.error(f"Erro Google Sheets: {e}")
@@ -89,7 +89,7 @@ categories = load_categories()
 @st.cache_data(ttl=30)
 def load_data():
     raw = sheet.get_all_values()
-    cols = ["ID","Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
+    cols = ["ID", "Pessoa", "Tipo", "Categoria", "Descrição", "Valor", "Data"]
 
     if len(raw) < 2:
         return pd.DataFrame(columns=cols)
@@ -108,10 +108,13 @@ df = load_data()
 # =========================
 modo = st.sidebar.selectbox(
     "Modo",
-    ["Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯"]
+    ["Casal 👨‍❤️‍👩", "Ruben 🤴", "Gabi 👸", "Metas 🎯"]
 )
 
-avatars = {"Ruben":"🤴","Gabi":"👸"}
+avatars = {
+    "Ruben": "🤴",
+    "Gabi": "👸"
+}
 
 # =========================
 # CATEGORIAS UI
@@ -145,34 +148,67 @@ if modo == "Casal 👨‍❤️‍👩":
     st.subheader("👨‍❤️‍👩 Casal - PRO 2 Inteligente")
 
     def get_last_salary(df, pessoa):
-        df_p = df[(df["Pessoa"] == pessoa) & (df["Tipo"] == "Salário")]
+        df_p = df[
+            (df["Pessoa"] == pessoa) &
+            (df["Tipo"] == "Salário")
+        ]
+
         if df_p.empty:
             return None
-        return df_p.sort_values("Data", ascending=False).iloc[0]["Data"]
+
+        return df_p.sort_values(
+            "Data",
+            ascending=False
+        ).iloc[0]["Data"]
 
     def filtrar_ciclo(df, pessoa):
         last_salary = get_last_salary(df, pessoa)
+
         if last_salary:
-            return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
+            return df[
+                (df["Pessoa"] == pessoa) &
+                (df["Data"] >= last_salary)
+            ]
+
         return df[df["Pessoa"] == pessoa]
 
-    for pessoa in ["Ruben","Gabi"]:
+    for pessoa in ["Ruben", "Gabi"]:
 
         st.markdown(f"## {avatars[pessoa]} {pessoa}")
 
         df_p = filtrar_ciclo(df, pessoa)
 
-        receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
-        despesas = df_p[df_p["Tipo"] == "Despesa"]
+        receitas = df_p[
+            df_p["Tipo"].isin([
+                "Salário",
+                "Subsídio Alimentação"
+            ])
+        ]
+
+        despesas = df_p[
+            df_p["Tipo"] == "Despesa"
+        ]
 
         total_receitas = receitas["Valor"].sum()
         total_despesas = despesas["Valor"].sum()
         saldo = total_receitas - total_despesas
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("💰 Receitas", f"{total_receitas:.2f} €")
-        c2.metric("💸 Despesas", f"{total_despesas:.2f} €")
-        c3.metric("📊 Saldo", f"{saldo:.2f} €")
+
+        c1.metric(
+            "💰 Receitas",
+            f"{total_receitas:.2f} €"
+        )
+
+        c2.metric(
+            "💸 Despesas",
+            f"{total_despesas:.2f} €"
+        )
+
+        c3.metric(
+            "📊 Saldo",
+            f"{saldo:.2f} €"
+        )
 
         st.markdown("### 💰 Receitas")
         st.dataframe(receitas, use_container_width=True)
@@ -188,7 +224,10 @@ if modo == "Casal 👨‍❤️‍👩":
         if total_receitas == 0 and total_despesas == 0:
             st.info("Sem dados suficientes para análise neste ciclo.")
         else:
-            taxa = (saldo / total_receitas * 100) if total_receitas > 0 else 0
+            taxa = (
+                saldo / total_receitas * 100
+                if total_receitas > 0 else 0
+            )
 
             if saldo < 0:
                 st.error("⚠️ Estás em défice neste ciclo.")
@@ -212,17 +251,23 @@ if modo == "Casal 👨‍❤️‍👩":
 
         if not despesas.empty:
             cat_sum = despesas.groupby("Categoria")["Valor"].sum()
+
             if not cat_sum.empty:
                 if (cat_sum.max() / total_despesas) > 0.4:
                     st.warning("⚠️ Uma categoria está a dominar os gastos")
 
-        if total_receitas > 0 and saldo > 0 and (saldo / total_receitas) > 0.25:
+        if (
+            total_receitas > 0 and
+            saldo > 0 and
+            (saldo / total_receitas) > 0.25
+        ):
             st.success("🟢 Excelente controlo financeiro!")
 
         st.markdown("#### 🗑 Eliminar registos")
 
         for _, row in df_p.iterrows():
-            c1,c2,c3,c4,c5 = st.columns([2,3,2,2,1])
+
+            c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 1])
 
             c1.write(row["Pessoa"])
             c2.write(row["Tipo"])
@@ -252,17 +297,25 @@ if modo == "Metas 🎯":
 
     def load_goals():
         raw = goal_sheet.get_all_values()
-        return pd.DataFrame(raw[1:], columns=raw[0]) if len(raw) > 1 else pd.DataFrame()
+
+        if len(raw) > 1:
+            return pd.DataFrame(raw[1:], columns=raw[0])
+
+        return pd.DataFrame()
 
     goals = load_goals()
 
     with st.expander("➕ Criar meta"):
         nome = st.text_input("Nome")
-        obj = st.number_input("Objetivo (€)", min_value=0.0)
+        obj = st.number_input(
+            "Objetivo (€)",
+            min_value=0.0
+        )
 
         if st.button("Criar meta"):
-            goal_sheet.append_row([nome,obj,0])
-            refresh()
+            if nome.strip():
+                goal_sheet.append_row([nome, obj, 0])
+                refresh()
 
     st.markdown("### 📊 Metas atuais")
 
@@ -278,21 +331,47 @@ if modo == "Metas 🎯":
 # =========================
 pessoa = modo.split()[0]
 
-st.subheader(f"{avatars.get(pessoa,'👤')} {pessoa}")
+st.subheader(f"{avatars.get(pessoa, '👤')} {pessoa}")
 
-tipo = st.selectbox("Tipo", ["Salário","Subsídio Alimentação","Despesa"])
+tipo = st.selectbox(
+    "Tipo",
+    ["Salário", "Subsídio Alimentação", "Despesa"]
+)
 
 categoria = ""
 descricao = ""
 
 if tipo == "Despesa":
-    categoria = st.selectbox("Categoria", categories if categories else ["Outros"])
-    descricao = st.text_input("Descrição")
+    categoria = st.selectbox(
+        "Categoria",
+        categories if categories else ["Outros"]
+    )
 
-valor = st.number_input("Valor (€)", min_value=0.0)
-data = st.date_input("Data", datetime.today())
+    # Só mostra descrição se for "Outros"
+    if categoria == "Outros":
+        descricao = st.text_input("Descrição obrigatória")
+
+valor = st.number_input(
+    "Valor (€)",
+    min_value=0.0
+)
+
+data = st.date_input(
+    "Data",
+    datetime.today()
+)
 
 if st.button("Adicionar"):
+
+    # validação obrigatória para Outros
+    if (
+        tipo == "Despesa" and
+        categoria == "Outros" and
+        descricao.strip() == ""
+    ):
+        st.error("❌ Tens de preencher a descrição quando escolhes 'Outros'")
+        st.stop()
+
     sheet.append_row([
         generate_id(),
         pessoa,
@@ -302,4 +381,5 @@ if st.button("Adicionar"):
         float(valor),
         str(data)
     ])
+
     refresh()
