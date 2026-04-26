@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import plotly.express as px
+import plotly.graph_objects as go
+from io import BytesIO
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -10,8 +12,12 @@ from google.oauth2.service_account import Credentials
 # =========================
 # APP
 # =========================
-st.set_page_config(page_title="Rubi&Gabi Finance PRO 2.1", layout="wide")
-st.title("💰 Controlo Financeiro ")
+st.set_page_config(
+    page_title="Rubi&Gabi", 
+    layout="wide",
+    page_icon="💰"
+)
+st.title("💰 Controlo Financeiro PRO")
 
 # =========================
 # SESSION STATE
@@ -25,6 +31,13 @@ if 'inputs' not in st.session_state:
 
 if 'confirm_delete' not in st.session_state:
     st.session_state.confirm_delete = None
+
+if 'filtros' not in st.session_state:
+    st.session_state.filtros = {
+        'mes': None,
+        'ano': None,
+        'pesquisa': ''
+    }
 
 # =========================
 # HELPERS
@@ -42,6 +55,12 @@ def reset_inputs():
         'descricao': '',
         'categoria': ''
     }
+
+def export_to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Dados')
+    return output.getvalue()
 
 # =========================
 # GOOGLE SHEETS
@@ -122,7 +141,7 @@ df = load_data()
 # =========================
 modo = st.sidebar.selectbox(
     "Modo",
-    ["Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯"]
+    ["Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯","Análises 📊"]
 )
 
 avatars = {"Ruben":"🤴","Gabi":"👸"}
@@ -133,7 +152,7 @@ avatars = {"Ruben":"🤴","Gabi":"👸"}
 st.sidebar.markdown("## ⚙️ Categorias")
 
 with st.sidebar.expander("➕ Adicionar categoria"):
-    new_cat = st.text_input("Nova categoria")
+    new_cat = st.text_input("Nova categoria", key="new_cat_input")
 
     if st.button("Adicionar categoria", key="add_cat"):
         if new_cat.strip():
@@ -150,6 +169,36 @@ with st.sidebar.expander("❌ Remover categoria"):
 
 with st.sidebar.expander("📋 Ver categorias"):
     st.write(categories if categories else "Sem categorias")
+
+# =========================
+# FILTROS
+# =========================
+st.sidebar.markdown("---")
+st.sidebar.markdown("## 🔍 Filtros")
+
+anos_disponiveis = sorted(df["Data"].dt.year.unique().tolist(), reverse=True) if not df.empty else [datetime.now().year]
+meses = ["Todos", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+
+filtro_ano = st.sidebar.selectbox("Ano", ["Todos"] + anos_disponiveis, key="filtro_ano")
+filtro_mes = st.sidebar.selectbox("Mês", meses, key="filtro_mes")
+pesquisa = st.sidebar.text_input("🔎 Pesquisar", key="pesquisa")
+
+def aplicar_filtros(df, ano, mes, pesquisa):
+    df_f = df.copy()
+    
+    if ano != "Todos":
+        df_f = df_f[df_f["Data"].dt.year == int(ano)]
+    
+    if mes != "Todos":
+        mes_idx = meses.index(mes)
+        df_f = df_f[df_f["Data"].dt.month == mes_idx]
+    
+    if pesquisa:
+        df_f = df_f[df_f["Descrição"].str.contains(pesquisa, case=False, na=False)]
+    
+    return df_f
+
+df_filtrado = aplicar_filtros(df, filtro_ano, filtro_mes, pesquisa)
 
 # =========================
 # CASAL
@@ -170,12 +219,28 @@ if modo == "Casal 👨‍❤️‍👩":
             return df[(df["Pessoa"] == pessoa) & (df["Data"] >= last_salary)]
         return df[df["Pessoa"] == pessoa]
 
-    # Processar cada pessoa em separado para evitar problemas de renderização
+    # Totais do casal
+    df_casal = df_filtrado.copy()
+    receitas_casal = df_casal[df_casal["Tipo"].isin(["Salário","Subsídio Alimentação"])]
+    despesas_casal = df_casal[df_casal["Tipo"] == "Despesa"]
+    
+    total_receitas_casal = receitas_casal["Valor"].sum()
+    total_despesas_casal = despesas_casal["Valor"].sum()
+    saldo_casal = total_receitas_casal - total_despesas_casal
+    
+    st.markdown("### 💑 Totais do Casal")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("💰 Receitas", f"{total_receitas_casal:.2f} €")
+    c2.metric("💸 Despesas", f"{total_despesas_casal:.2f} €")
+    c3.metric("📊 Saldo", f"{saldo_casal:.2f} €", delta_color="normal")
+
+    st.markdown("---")
+
     for pessoa in ["Ruben", "Gabi"]:
 
         st.markdown(f"### {avatars[pessoa]} {pessoa}")
 
-        df_p = filtrar_ciclo(df, pessoa)
+        df_p = filtrar_ciclo(df_filtrado, pessoa)
 
         receitas = df_p[df_p["Tipo"].isin(["Salário","Subsídio Alimentação"])]
         despesas = df_p[df_p["Tipo"] == "Despesa"]
@@ -211,7 +276,6 @@ if modo == "Casal 👨‍❤️‍👩":
             if not df_p.empty:
                 st.warning("⚠️ Clique no botão para eliminar um registo")
                 
-                # Usar container para evitar problemas com keys duplicadas
                 for idx, (_, row) in enumerate(df_p.iterrows()):
                     with st.container():
                         c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 1])
@@ -221,7 +285,6 @@ if modo == "Casal 👨‍❤️‍👩":
                         c3.write(row["Categoria"])
                         c4.write(f"{row['Valor']:.2f} €")
                         
-                        # Verificar se há confirmação pendente
                         if st.session_state.confirm_delete == row["ID"]:
                             c5.write("❓")
                             col_confirm, col_cancel = st.columns(2)
@@ -281,24 +344,157 @@ if modo == "Metas 🎯":
     if goals.empty:
         st.info("Ainda não existem metas criadas.")
     else:
-        # Calcular progresso
-        if not goals.empty and 'Objetivo' in goals.columns:
-            goals['Progresso'] = goals.apply(
-                lambda x: (x.get('Atual', 0) / x['Objetivo'] * 100) if x['Objetivo'] > 0 else 0, 
-                axis=1
-            )
-        
         st.dataframe(goals, use_container_width=True)
         
-        # Gráfico de progresso
-        if not goals.empty:
-            st.markdown("### 📈 Progresso das Metas")
-            for _, goal in goals.iterrows():
-                objetivo = float(goal.get('Objetivo', 0))
-                atual = float(goal.get('Atual', 0))
-                progresso = min((atual / objetivo * 100), 100) if objetivo > 0 else 0
-                
-                st.progress(int(progresso), text=f"{goal['Meta']}: {progresso:.1f}% ({atual:.2f}€ / {objetivo:.2f}€)")
+        st.markdown("### 📈 Progresso das Metas")
+        
+        for _, goal in goals.iterrows():
+            objetivo = float(goal.get('Objetivo', 0))
+            atual = float(goal.get('Atual', 0))
+            progresso = min((atual / objetivo * 100), 100) if objetivo > 0 else 0
+            
+            st.progress(int(progresso), text=f"{goal['Meta']}: {progresso:.1f}% ({atual:.2f}€ / {objetivo:.2f}€)")
+        
+        # Atualizar meta
+        st.markdown("---")
+        st.markdown("### 💵 Atualizar Meta")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            meta_selecionada = st.selectbox("Selecionar meta", goals['Meta'].tolist() if not goals.empty else [])
+        with col2:
+            valor_adicionar = st.number_input("Valor a adicionar (€)", min_value=0.0, key="atualizar_meta")
+        
+        if st.button("Atualizar", key="atualizar_meta_btn"):
+            if meta_selecionada and valor_adicionar > 0:
+                data = goal_sheet.get_all_values()
+                for i, row in enumerate(data):
+                    if i == 0:
+                        continue
+                    if row[0] == meta_selecionada:
+                        atual = float(row[2]) if row[2] else 0
+                        goal_sheet.update_cell(i + 1, 3, atual + valor_adicionar)
+                        refresh()
+            else:
+                st.error("Selecione uma meta e adicione um valor")
+
+    st.stop()
+
+# =========================
+# ANÁLISES
+# =========================
+if modo == "Análises 📊":
+
+    st.subheader("📊 Análises e Gráficos")
+
+    df_analise = df_filtrado.copy()
+    
+    if df_analise.empty:
+        st.info("Sem dados para analisar")
+        st.stop()
+
+    # Despesas por categoria
+    despesas = df_analise[df_analise["Tipo"] == "Despesa"]
+    
+    if not despesas.empty:
+        st.markdown("### 🍰 Despesas por Categoria")
+        fig_pie = px.pie(
+            despesas, 
+            values='Valor', 
+            names='Categoria',
+            hole=0.4,
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+        
+        # Tabela de despesas por categoria
+        despesa_categoria = despesas.groupby('Categoria')['Valor'].sum().reset_index()
+        despesa_categoria = despesa_categoria.sort_values('Valor', ascending=False)
+        st.dataframe(
+            despesa_categoria.assign(Percentual=lambda x: (x['Valor'] / x['Valor'].sum() * 100).round(1).astype(str) + '%'),
+            use_container_width=True
+        )
+
+    st.markdown("---")
+
+    # Evolução mensal
+    st.markdown("### 📈 Evolução Mensal")
+    
+    df_analise['Ano_Mes'] = df_analise['Data'].dt.to_period('M')
+    mensal = df_analise.groupby(['Ano_Mes', 'Pessoa'])['Valor'].sum().reset_index()
+    mensal['Ano_Mes'] = mensal['Ano_Mes'].astype(str)
+    
+    if not mensal.empty:
+        fig_line = px.line(
+            mensal, 
+            x='Ano_Mes', 
+            y='Valor', 
+            color='Pessoa',
+            markers=True
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
+
+    st.markdown("---")
+
+    # Comparação Ruben vs Gabi
+    st.markdown("### ⚖️ Comparação Ruben vs Gabi")
+    
+    comparacao = df_analise.groupby('Pessoa').agg({
+        'Valor': ['sum', 'count']
+    }).reset_index()
+    comparacao.columns = ['Pessoa', 'Total', 'Registos']
+    
+    if not comparacao.empty:
+        fig_bar = px.bar(
+            comparacao, 
+            x='Pessoa', 
+            y='Total',
+            color='Pessoa',
+            text='Total'
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+        st.dataframe(comparacao, use_container_width=True)
+
+    st.markdown("---")
+
+    # Estatísticas
+    st.markdown("### 📉 Estatísticas")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_receitas = df_analise[df_analise["Tipo"].isin(["Salário","Subsídio Alimentação"])]['Valor'].sum()
+    total_despesas = df_analise[df_analise["Tipo"] == "Despesa"]['Valor'].sum()
+    media_despesa = despesas['Valor'].mean() if not despesas.empty else 0
+    maior_despesa = despesas['Valor'].max() if not despesas.empty else 0
+    
+    col1.metric("Total Receitas", f"{total_receitas:.2f} €")
+    col2.metric("Total Despesas", f"{total_despesas:.2f} €")
+    col3.metric("Média Despesa", f"{media_despesa:.2f} €")
+    col4.metric("Maior Despesa", f"{maior_despesa:.2f} €")
+
+    st.markdown("---")
+
+    # Exportar
+    st.markdown("### 📥 Exportar Dados")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.download_button(
+            label="📊 Exportar para Excel",
+            data=export_to_excel(df_analise),
+            file_name="finance_app_export.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    with col2:
+        csv = df_analise.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📄 Exportar para CSV",
+            data=csv,
+            file_name="finance_app_export.csv",
+            mime="text/csv"
+        )
 
     st.stop()
 
@@ -347,13 +543,11 @@ if tipo == "Despesa" and not categoria:
 if tipo == "Despesa" and not descricao.strip():
     erros.append("Adicione uma descrição")
 
-# Mostrar erros
 if erros:
     for erro in erros:
         st.error(erro)
 
 if st.button("Adicionar", key="adicionar"):
-    # Validação final
     if valor > 0 and (tipo != "Despesa" or (categoria and descricao.strip())):
         sheet.append_row([
             generate_id(),
@@ -369,5 +563,4 @@ if st.button("Adicionar", key="adicionar"):
     else:
         st.error("Por favor, preencha todos os campos corretamente")
 
-# Mostrar último registo adicionado com sucesso
 st.success("✅ Pronto para adicionar registos")
