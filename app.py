@@ -149,6 +149,7 @@ def load_data():
     df = pd.DataFrame(raw[1:], columns=raw[0])
 
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
+    # Converter Data e manter apenas a parte da data (sem hora)
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.date
 
     return df
@@ -282,6 +283,9 @@ if modo == "Casal 👨‍❤️‍👩":
             if not receitas.empty:
                 cols_to_show = [c for c in ["ID"] if c in receitas.columns]
                 df_show = receitas.drop(columns=cols_to_show)
+                # Formatar data para mostrar apenas dia/mês/ano
+                if 'Data' in df_show.columns:
+                    df_show['Data'] = pd.to_datetime(df_show['Data']).dt.strftime('%d-%m-%Y')
                 st.dataframe(
                     df_show,
                     use_container_width=True
@@ -294,6 +298,9 @@ if modo == "Casal 👨‍❤️‍👩":
                 # Mostrar também a descrição se existir
                 cols_to_show = [c for c in ["ID"] if c in despesas.columns]
                 df_show = despesas.drop(columns=cols_to_show)
+                # Formatar data para mostrar apenas dia/mês/ano
+                if 'Data' in df_show.columns:
+                    df_show['Data'] = pd.to_datetime(df_show['Data']).dt.strftime('%d-%m-%Y')
                 st.dataframe(
                     df_show,
                     use_container_width=True
@@ -434,7 +441,7 @@ if modo == "Análises 📊":
     
     # Converter Data para datetime se necessário
     try:
-        df_analise['Data'] = pd.to_datetime(df_analise['Data'], errors='coerce')
+        df_analise['Data'] = pd.to_datetime(df_analise['Data'], errors='coerce').dt.date
     except:
         st.warning("⚠️ Erro ao processar datas")
         st.stop()
@@ -482,7 +489,11 @@ if modo == "Análises 📊":
         # Simplificar a tabela
         cols_show = ['Pessoa', 'Tipo', 'Categoria', 'Valor', 'Data']
         cols_exist = [c for c in cols_show if c in ultimos.columns]
-        st.dataframe(ultimos[cols_exist], use_container_width=True)
+        df_view = ultimos[cols_exist].copy()
+        # Formatar data para mostrar apenas dia/mês/ano
+        if 'Data' in df_view.columns:
+            df_view['Data'] = pd.to_datetime(df_view['Data']).dt.strftime('%d-%m-%Y')
+        st.dataframe(df_view, use_container_width=True)
 
     st.markdown("---")
 
@@ -541,7 +552,9 @@ valor = st.number_input(
     key="valor_input"
 )
 
-data = st.date_input("Data", datetime.today(), key="data_input")
+# Data máxima = hoje (não permite datas futuras)
+data_max = datetime.today().date()
+data = st.date_input("Data", datetime.today(), key="data_input", max_val=data_max)
 
 # Validação
 erros = []
