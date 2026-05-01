@@ -45,7 +45,7 @@ def refresh(clear_cache=True):
             load_goals.clear()
         except NameError:
             pass
-    st.experimental_rerun()
+    st.rerun()
 
 def generate_id():
     return str(uuid.uuid4())
