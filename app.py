@@ -601,11 +601,18 @@ if modo == "Análises 📊":
             df_view['Data'] = pd.to_datetime(df_view['Data']).dt.strftime('%d-%m-%Y')
         # Destacar despesas elevadas
         def highlight_despesas(val):
-            if val > 200:
+            if isinstance(val, (int, float)) and val > 200:
                 return 'color: red; font-weight: bold'
             return ''
+        
+        # Aplicar estilo usando apply ao invés de applymap (deprecated)
+        styled_df = df_view.style.apply(
+            lambda x: ['color: red; font-weight: bold' if isinstance(v, (int, float)) and v > 200 else '' for v in x], 
+            subset=['Valor']
+        )
+        
         st.dataframe(
-            df_view.style.applymap(highlight_despesas, subset=['Valor']), 
+            styled_df,
             use_container_width=True
         )
 
@@ -721,6 +728,59 @@ if submitted:
         st.toast("✅ Registado com sucesso!", icon="💰")
         time.sleep(1)
         refresh()
+
+# =========================
+# ELIMINAR REGISTOS INDIVIDUAIS
+# =========================
+st.markdown("---")
+st.markdown("### 🗑 Eliminar Registos")
+
+# Filtrar apenas registos desta pessoa
+df_pessoa = df[df["Pessoa"] == pessoa]
+
+if df_pessoa.empty:
+    st.info(f"Sem registos para {pessoa}")
+else:
+    st.warning("⚠️ Clique no botão para eliminar um registo")
+    
+    # Mostrar apenas últimos 10 registos para evitar muitas linhas
+    df_pessoa_limited = df_pessoa.tail(10)
+    
+    for idx, (_, row) in enumerate(df_pessoa_limited.iterrows()):
+        with st.container():
+            c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 1])
+            
+            c1.write(row["Tipo"])
+            c2.write(row["Categoria"])
+            c3.write(row["Descrição"] if pd.notna(row["Descrição"]) else "")
+            c4.write(f"{row['Valor']:.2f} €")
+            
+            if st.session_state.confirm_delete == row["ID"]:
+                c5.write("❓")
+                col_confirm, col_cancel = st.columns(2)
+                if col_confirm.button("✓", key=f"confirm_{row['ID']}"):
+                    data = sheet.get_all_values()
+                    headers = data[0]
+                    id_index = headers.index("ID")
+                    
+                    for i, r in enumerate(data[1:], start=2):
+                        if r[id_index] == row["ID"]:
+                            sheet.delete_rows(i)
+                            break
+                    
+                    st.session_state.confirm_delete = None
+                    load_data.clear()  # Limpar cache
+                    refresh()
+                
+                if col_cancel.button("✗", key=f"cancel_{row['ID']}"):
+                    st.session_state.confirm_delete = None
+                    refresh()
+            else:
+                if c5.button("🗑️", key=f"del_{row['ID']}"):
+                    st.session_state.confirm_delete = row["ID"]
+                    refresh()
+            
+            st.divider()
 
 # Info de cache (debug opcional)
 with st.sidebar.expander("ℹ️ Info"):
