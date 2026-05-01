@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide",
     page_icon="💰"
 )
-st.title("💰 Gestão Financeira")
+st.title("💰 Controlo Financeiro PRO")
 
 # =========================
 # SESSION STATE
@@ -33,36 +33,31 @@ if 'inputs' not in st.session_state:
 if 'confirm_delete' not in st.session_state:
     st.session_state.confirm_delete = None
 
-if 'filtros' not in st.session_state:
-    st.session_state.filtros = {
-        'mes': 'Todos',
-        'ano': 'Todos',
-        'pesquisa': ''
-    }
-
 # =========================
 # HELPERS
 # =========================
-def refresh():
-    st.cache_data.clear()
-    # Limpar cache específico
-    load_data.clear()
-    load_categories.clear()
-    try:
-        load_goals.clear()
-    except:
-        pass
-    st.rerun()
+def refresh(clear_cache=True):
+    if clear_cache:
+        st.cache_data.clear()
+        load_data.clear()
+        load_categories.clear()
+        try:
+            load_goals.clear()
+        except NameError:
+            pass
+    st.experimental_rerun()
 
 def generate_id():
     return str(uuid.uuid4())
 
-def reset_inputs():
-    st.session_state.inputs = {
-        'valor': 0.0,
-        'descricao': '',
-        'categoria': ''
-    }
+def normalize_text(value):
+    return str(value).strip()
+
+def safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
 
 def export_to_excel(df):
     try:
@@ -81,30 +76,30 @@ if 'api_calls' not in st.session_state:
 # =========================
 # GOOGLE SHEETS
 # =========================
-scope = [
+SCOPE = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
+SHEET_ID = "1-kZgk9Xw2fmMkswPJJVl3eiuMF9g8nJuIJo6UX9XME"
+SHEET_HEADERS = ["ID", "Pessoa", "Tipo", "Categoria", "Descrição", "Valor", "Data"]
 
 try:
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
-        scopes=scope
+        scopes=SCOPE
     )
 
     client = gspread.authorize(creds)
-
-    SHEET_ID = "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
-
-    sheet = client.open_by_key(SHEET_ID).sheet1
-    cat_sheet = client.open_by_key(SHEET_ID).worksheet("Categorias")
+    workbook = client.open_by_key(SHEET_ID)
+    sheet = workbook.sheet1
+    cat_sheet = workbook.worksheet("Categorias")
 
     try:
-        goal_sheet = client.open_by_key(SHEET_ID).worksheet("Metas")
-    except:
-        goal_sheet = client.open_by_key(SHEET_ID).add_worksheet("Metas", 100, 3)
-        goal_sheet.append_row(["Meta","Objetivo","Atual"])
+        goal_sheet = workbook.worksheet("Metas")
+    except Exception:
+        goal_sheet = workbook.add_worksheet("Metas", rows=100, cols=3)
+        goal_sheet.append_row(["Meta", "Objetivo", "Atual"])
 
 except Exception as e:
     st.error(f"Erro Google Sheets: {e}")
@@ -115,24 +110,35 @@ except Exception as e:
 # =========================
 @st.cache_data(ttl=60)  # Cache por 1 minuto
 def load_categories():
-    data = cat_sheet.get_all_values()
-    return [row[0] for row in data[1:] if row[0].strip() != ""]
+    try:
+        data = cat_sheet.get_all_values()
+        return [normalize_text(row[0]) for row in data[1:] if normalize_text(row[0])]
+    except Exception as e:
+        st.error(f"Erro ao carregar categorias: {e}")
+        return []
 
 def add_category(cat):
+    cat = normalize_text(cat)
+    if not cat:
+        return
+    if cat in load_categories():
+        return
     cat_sheet.append_row([cat])
-    # Limpar cache após adicionar
     load_categories.clear()
 
 def delete_category(cat):
-    data = cat_sheet.get_all_values()
-    for i, row in enumerate(data):
-        if i == 0:
-            continue
-        if row[0] == cat:
-            cat_sheet.delete_rows(i + 1)
-            break
-    # Limpar cache após eliminar
-    load_categories.clear()
+    try:
+        data = cat_sheet.get_all_values()
+        for i, row in enumerate(data):
+            if i == 0:
+                continue
+            if normalize_text(row[0]) == normalize_text(cat):
+                cat_sheet.delete_rows(i + 1)
+                break
+    except Exception as e:
+        st.error(f"Erro ao eliminar categoria: {e}")
+    finally:
+        load_categories.clear()
 
 categories = load_categories()
 
@@ -141,20 +147,24 @@ categories = load_categories()
 # =========================
 @st.cache_data(ttl=60)  # Cache por 1 minuto
 def load_data():
-    raw = sheet.get_all_values()
-    cols = ["ID","Pessoa","Tipo","Categoria","Descrição","Valor","Data"]
+    try:
+        raw = sheet.get_all_values()
+    except Exception as e:
+        st.error(f"Erro ao ler dados: {e}")
+        return pd.DataFrame(columns=SHEET_HEADERS)
 
     if len(raw) < 2:
-        return pd.DataFrame(columns=cols)
+        return pd.DataFrame(columns=SHEET_HEADERS)
 
     df = pd.DataFrame(raw[1:], columns=raw[0])
+    for col in SHEET_HEADERS:
+        if col not in df.columns:
+            df[col] = None
+    df = df[SHEET_HEADERS]
 
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-    # Converter Data para datetime
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-    # Remover linhas com Data inválida (NaT)
     df = df[df["Data"].notna()]
-    # Ordenar por data decrescente
     df = df.sort_values("Data", ascending=False).reset_index(drop=True)
 
     return df
@@ -232,191 +242,16 @@ def aplicar_filtros(df, ano, mes, pesquisa):
         df_f = df_f[df_f["Data"].dt.month == mes_idx]
     
     if pesquisa:
-        # Pesquisar tanto em Descrição quanto em Categoria
+        pesquisa = normalize_text(pesquisa)
         df_f = df_f[
-            df_f["Descrição"].str.contains(pesquisa, case=False, na=False) |
-            df_f["Categoria"].str.contains(pesquisa, case=False, na=False)
+            df_f["Descrição"].astype(str).str.contains(pesquisa, case=False, na=False) |
+            df_f["Categoria"].astype(str).str.contains(pesquisa, case=False, na=False) |
+            df_f["Pessoa"].astype(str).str.contains(pesquisa, case=False, na=False)
         ]
     
     return df_f
 
 df_filtrado = aplicar_filtros(df, filtro_ano, filtro_mes, pesquisa)
-
-# =========================
-# INÍCIO - Dashboard
-# =========================
-if modo == "Início 🏠":
-    
-    st.subheader("🏠 Resumo Financeiro")
-    
-    # Obter mês atual
-    mes_atual = datetime.now().month
-    ano_atual = datetime.now().year
-    
-    # Filtrar dados do mês atual
-    df_mes_atual = df[(df["Data"].dt.month == mes_atual) & (df["Data"].dt.year == ano_atual)]
-    
-    # Mês anterior
-    mes_anterior = mes_atual - 1 if mes_atual > 1 else 12
-    ano_anterior = ano_atual if mes_atual > 1 else ano_atual - 1
-    df_mes_anterior = df[(df["Data"].dt.month == mes_anterior) & (df["Data"].dt.year == ano_anterior)]
-    
-    # Totais mês atual
-    receitas_atual = df_mes_atual[df_mes_atual["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
-    despesas_atual = df_mes_atual[df_mes_atual["Tipo"] == "Despesa"]["Valor"].sum()
-    saldo_atual = receitas_atual - despesas_atual
-    
-    # Totais mês anterior
-    receitas_anterior = df_mes_anterior[df_mes_anterior["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
-    despesas_anterior = df_mes_anterior[df_mes_anterior["Tipo"] == "Despesa"]["Valor"].sum()
-    saldo_anterior = receitas_anterior - despesas_anterior
-    
-    # === Cards do mês atual ===
-    st.markdown("### 📅 Este Mês")
-    
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("💰 Receitas", f"{receitas_atual:,.2f} €", 
-              delta=f"{receitas_atual - receitas_anterior:,.2f} €" if receitas_anterior > 0 else None)
-    c2.metric("💸 Despesas", f"{despesas_atual:,.2f} €",
-              delta=f"-{despesas_atual - despesas_anterior:,.2f} €" if despesas_anterior > 0 else None,
-              delta_color="inverse")
-    c3.metric("📊 Saldo", f"{saldo_atual:,.2f} €",
-              delta=f"{saldo_atual - saldo_anterior:,.2f} €" if saldo_anterior != 0 else None,
-              delta_color="normal" if saldo_atual >= 0 else "inverse")
-    c4.metric("🔄 Taxa Poupança", f"{(receitas_atual - despesas_atual) / receitas_atual * 100:.1f}%" if receitas_atual > 0 else "0%")
-    
-    st.markdown("---")
-    
-    # === Despesas por categoria este mês ===
-    if not df_mes_atual[df_mes_atual["Tipo"] == "Despesa"].empty:
-        st.markdown("### 🍰 Despesas por Categoria (Este Mês)")
-        
-        despesa_cat = df_mes_atual[df_mes_atual["Tipo"] == "Despesa"].groupby('Categoria')['Valor'].sum().sort_values(ascending=False)
-        
-        # Top 5 categorias
-        top_categorias = despesa_cat.head(5)
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            fig_bar = px.bar(
-                x=top_categorias.values,
-                y=top_categorias.index,
-                orientation='h',
-                title="Top 5 Categorias",
-                labels={'x': 'Valor (€)', 'y': 'Categoria'},
-                color=top_categorias.values,
-                color_continuous_scale='RdYlGn_r'
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-        
-        with col2:
-            st.markdown("**Detalhe:**")
-            for cat, valor in despesa_cat.items():
-                pct = (valor / despesas_atual * 100) if despesas_atual > 0 else 0
-                st.write(f"• {cat}: {valor:,.0f} € ({pct:.0f}%)")
-    
-    st.markdown("---")
-    
-    # === Alertas de despesas elevadas ===
-    st.markdown("### ⚠️ Alertas")
-    
-    # Verificar despesas > 200€ neste mês
-    despesas_altas = df_mes_atual[(df_mes_atual["Tipo"] == "Despesa") & (df_mes_atual["Valor"] > 200)]
-    
-    if not despesas_altas.empty:
-        st.warning(f"💡 {len(despesas_altas)} despesas superiores a 200€ este mês:")
-        for _, row in despesas_altas.iterrows():
-            st.write(f"• {row['Categoria']}: {row['Valor']:,.2f} € ({row['Pessoa']})")
-    else:
-        st.success("✅ Nenhuma despesa elevada este mês!")
-    
-    # Verificar se há saldo negativo
-    if saldo_atual < 0:
-        st.error(f"⚠️ Atenção: Saldo negativo este mês!")
-    elif saldo_atual < receitas_atual * 0.1:
-        st.warning("💡 Sugestão: Poucos ahorros este mês. Considere reduzir despesas.")
-    else:
-        st.success("💰 Bom trabalho! Está a poupar bem este mês.")
-    
-    st.markdown("---")
-    
-    # === Comparação mensal ===
-    st.markdown("### 📈 Comparação com Mês Anterior")
-    
-    comp_col1, comp_col2, comp_col3 = st.columns(3)
-    
-    with comp_col1:
-        var_receitas = ((receitas_atual - receitas_anterior) / receitas_anterior * 100) if receitas_anterior > 0 else 0
-        st.metric("Receitas", f"{receitas_atual:,.0f} €", f"{var_receitas:+.1f}%")
-    
-    with comp_col2:
-        var_despesas = ((despesas_atual - despesas_anterior) / despesas_anterior * 100) if despesas_anterior > 0 else 0
-        st.metric("Despesas", f"{despesas_atual:,.0f} €", f"{var_despesas:+.1f}%", delta_color="inverse" if var_despesas > 0 else "normal")
-    
-    with comp_col3:
-        var_saldo = ((saldo_atual - saldo_anterior) / abs(saldo_anterior) * 100) if saldo_anterior != 0 else 0
-        st.metric("Saldo", f"{saldo_atual:,.0f} €", f"{var_saldo:+.1f}%")
-    
-    st.info("💡 Use o menu lateral para navegar para Casal, Ruben, Gabi, Metas ou Análises.")
-    
-    st.markdown("---")
-    
-    # === Evolução mensal ===
-    st.markdown("### 📈 Evolução Mensal")
-    
-    # Calcular dados por mês (últimos 6 meses)
-    df_ultimos_meses = df[df["Data"] >= (datetime.now() - timedelta(days=180))].copy()
-    
-    if not df_ultimos_meses.empty:
-        df_ultimos_meses["Mes"] = df_ultimos_meses["Data"].dt.to_period("M").astype(str)
-        
-        # Agrupar por mês
-        evolucao = df_ultimos_meses.groupby("Mes").agg({
-            "Valor": lambda x: df_ultimos_meses.loc[x.index, df_ultimos_meses["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum() - df_ultimos_meses.loc[x.index, df_ultimos_meses["Tipo"] == "Despesa"]["Valor"].sum()
-        }).reset_index()
-        
-        # Separar receitas e despesas
-        receitas_mes = df_ultimos_meses[df_ultimos_meses["Tipo"].isin(["Salário","Subsídio Alimentação"])].groupby("Mes")["Valor"].sum().reset_index()
-        despesas_mes = df_ultimos_meses[df_ultimos_meses["Tipo"] == "Despesa"].groupby("Mes")["Valor"].sum().reset_index()
-        
-        # Criar gráfico de linhas
-        fig_evol = go.Figure()
-        fig_evol.add_trace(go.Scatter(x=receitas_mes["Mes"], y=receitas_mes["Valor"], name="Receitas", line=dict(color="green", width=3), fill='tozeroy', fillcolor='rgba(0,200,0,0.1)'))
-        fig_evol.add_trace(go.Scatter(x=despesas_mes["Mes"], y=despesas_mes["Valor"], name="Despesas", line=dict(color="red", width=3), fill='tozeroy', fillcolor='rgba(200,0,0,0.1)'))
-        
-        fig_evol.update_layout(
-            title="Receitas vs Despesas (Últimos 6 meses)",
-            xaxis_title="Mês",
-            yaxis_title="Valor (€)",
-            hovermode="x unified"
-        )
-        st.plotly_chart(fig_evol, use_container_width=True)
-    else:
-        st.info("Sem dados suficientes para mostrar evolução.")
-    
-    st.markdown("---")
-    
-    # === Dados por pessoa ===
-    st.markdown("### 👤 Por Pessoa")
-    
-    pessoa_toggle = st.radio("Ver:", ["Ambos", "Ruben", "Gabi"], horizontal=True)
-    
-    for pessoa_nome in ["Ruben", "Gabi"]:
-        if pessoa_toggle == "Ambos" or pessoa_toggle == pessoa_nome:
-            df_pessoa = df_mes_atual[df_mes_atual["Pessoa"] == pessoa_nome]
-            
-            receitas_p = df_pessoa[df_pessoa["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
-            despesas_p = df_pessoa[df_pessoa["Tipo"] == "Despesa"]["Valor"].sum()
-            saldo_p = receitas_p - despesas_p
-            
-            with st.expander(f"{avatars.get(pessoa_nome, '👤')} {pessoa_nome} - Este Mês"):
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Receitas", f"{receitas_p:,.0f} €")
-                c2.metric("Despesas", f"{despesas_p:,.0f} €")
-                c3.metric("Saldo", f"{saldo_p:,.0f} €", delta_color="normal" if saldo_p >= 0 else "inverse")
-    
-    st.stop()
 
 # =========================
 # CASAL
