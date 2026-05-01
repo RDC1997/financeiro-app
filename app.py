@@ -164,7 +164,7 @@ df = load_data()
 # =========================
 modo = st.sidebar.selectbox(
     "Modo",
-    ["Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯","Análises 📊"]
+    ["Início 🏠","Casal 👨‍❤️‍👩","Ruben 🤴","Gabi 👸","Metas 🎯","Análises 📊"]
 )
 
 avatars = {"Ruben":"🤴","Gabi":"👸"}
@@ -230,11 +230,191 @@ def aplicar_filtros(df, ano, mes, pesquisa):
         df_f = df_f[df_f["Data"].dt.month == mes_idx]
     
     if pesquisa:
-        df_f = df_f[df_f["Descrição"].str.contains(pesquisa, case=False, na=False)]
+        # Pesquisar tanto em Descrição quanto em Categoria
+        df_f = df_f[
+            df_f["Descrição"].str.contains(pesquisa, case=False, na=False) |
+            df_f["Categoria"].str.contains(pesquisa, case=False, na=False)
+        ]
     
     return df_f
 
 df_filtrado = aplicar_filtros(df, filtro_ano, filtro_mes, pesquisa)
+
+# =========================
+# INÍCIO - Dashboard
+# =========================
+if modo == "Início 🏠":
+    
+    st.subheader("🏠 Resumo Financeiro")
+    
+    # Obter mês atual
+    mes_atual = datetime.now().month
+    ano_atual = datetime.now().year
+    
+    # Filtrar dados do mês atual
+    df_mes_atual = df[(df["Data"].dt.month == mes_atual) & (df["Data"].dt.year == ano_atual)]
+    
+    # Mês anterior
+    mes_anterior = mes_atual - 1 if mes_atual > 1 else 12
+    ano_anterior = ano_atual if mes_atual > 1 else ano_atual - 1
+    df_mes_anterior = df[(df["Data"].dt.month == mes_anterior) & (df["Data"].dt.year == ano_anterior)]
+    
+    # Totais mês atual
+    receitas_atual = df_mes_atual[df_mes_atual["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
+    despesas_atual = df_mes_atual[df_mes_atual["Tipo"] == "Despesa"]["Valor"].sum()
+    saldo_atual = receitas_atual - despesas_atual
+    
+    # Totais mês anterior
+    receitas_anterior = df_mes_anterior[df_mes_anterior["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
+    despesas_anterior = df_mes_anterior[df_mes_anterior["Tipo"] == "Despesa"]["Valor"].sum()
+    saldo_anterior = receitas_anterior - despesas_anterior
+    
+    # === Cards do mês atual ===
+    st.markdown("### 📅 Este Mês")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("💰 Receitas", f"{receitas_atual:,.2f} €", 
+              delta=f"{receitas_atual - receitas_anterior:,.2f} €" if receitas_anterior > 0 else None)
+    c2.metric("💸 Despesas", f"{despesas_atual:,.2f} €",
+              delta=f"-{despesas_atual - despesas_anterior:,.2f} €" if despesas_anterior > 0 else None,
+              delta_color="inverse")
+    c3.metric("📊 Saldo", f"{saldo_atual:,.2f} €",
+              delta=f"{saldo_atual - saldo_anterior:,.2f} €" if saldo_anterior != 0 else None,
+              delta_color="normal" if saldo_atual >= 0 else "inverse")
+    c4.metric("🔄 Taxa Poupança", f"{(receitas_atual - despesas_atual) / receitas_atual * 100:.1f}%" if receitas_atual > 0 else "0%")
+    
+    st.markdown("---")
+    
+    # === Despesas por categoria este mês ===
+    if not df_mes_atual[df_mes_atual["Tipo"] == "Despesa"].empty:
+        st.markdown("### 🍰 Despesas por Categoria (Este Mês)")
+        
+        despesa_cat = df_mes_atual[df_mes_atual["Tipo"] == "Despesa"].groupby('Categoria')['Valor'].sum().sort_values(ascending=False)
+        
+        # Top 5 categorias
+        top_categorias = despesa_cat.head(5)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            fig_bar = px.bar(
+                x=top_categorias.values,
+                y=top_categorias.index,
+                orientation='h',
+                title="Top 5 Categorias",
+                labels={'x': 'Valor (€)', 'y': 'Categoria'},
+                color=top_categorias.values,
+                color_continuous_scale='RdYlGn_r'
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        with col2:
+            st.markdown("**Detalhe:**")
+            for cat, valor in despesa_cat.items():
+                pct = (valor / despesas_atual * 100) if despesas_atual > 0 else 0
+                st.write(f"• {cat}: {valor:,.0f} € ({pct:.0f}%)")
+    
+    st.markdown("---")
+    
+    # === Alertas de despesas elevadas ===
+    st.markdown("### ⚠️ Alertas")
+    
+    # Verificar despesas > 200€ neste mês
+    despesas_altas = df_mes_atual[(df_mes_atual["Tipo"] == "Despesa") & (df_mes_atual["Valor"] > 200)]
+    
+    if not despesas_altas.empty:
+        st.warning(f"💡 {len(despesas_altas)} despesas superiores a 200€ este mês:")
+        for _, row in despesas_altas.iterrows():
+            st.write(f"• {row['Categoria']}: {row['Valor']:,.2f} € ({row['Pessoa']})")
+    else:
+        st.success("✅ Nenhuma despesa elevada este mês!")
+    
+    # Verificar se há saldo negativo
+    if saldo_atual < 0:
+        st.error(f"⚠️ Atenção: Saldo negativo este mês!")
+    elif saldo_atual < receitas_atual * 0.1:
+        st.warning("💡 Sugestão: Poucos ahorros este mês. Considere reduzir despesas.")
+    else:
+        st.success("💰 Bom trabalho! Está a poupar bem este mês.")
+    
+    st.markdown("---")
+    
+    # === Comparação mensal ===
+    st.markdown("### 📈 Comparação com Mês Anterior")
+    
+    comp_col1, comp_col2, comp_col3 = st.columns(3)
+    
+    with comp_col1:
+        var_receitas = ((receitas_atual - receitas_anterior) / receitas_anterior * 100) if receitas_anterior > 0 else 0
+        st.metric("Receitas", f"{receitas_atual:,.0f} €", f"{var_receitas:+.1f}%")
+    
+    with comp_col2:
+        var_despesas = ((despesas_atual - despesas_anterior) / despesas_anterior * 100) if despesas_anterior > 0 else 0
+        st.metric("Despesas", f"{despesas_atual:,.0f} €", f"{var_despesas:+.1f}%", delta_color="inverse" if var_despesas > 0 else "normal")
+    
+    with comp_col3:
+        var_saldo = ((saldo_atual - saldo_anterior) / abs(saldo_anterior) * 100) if saldo_anterior != 0 else 0
+        st.metric("Saldo", f"{saldo_atual:,.0f} €", f"{var_saldo:+.1f}%")
+    
+    st.info("💡 Use o menu lateral para navegar para Casal, Ruben, Gabi, Metas ou Análises.")
+    
+    st.markdown("---")
+    
+    # === Evolução mensal ===
+    st.markdown("### 📈 Evolução Mensal")
+    
+    # Calcular dados por mês (últimos 6 meses)
+    df_ultimos_meses = df[df["Data"] >= (datetime.now() - timedelta(days=180))].copy()
+    
+    if not df_ultimos_meses.empty:
+        df_ultimos_meses["Mes"] = df_ultimos_meses["Data"].dt.to_period("M").astype(str)
+        
+        # Agrupar por mês
+        evolucao = df_ultimos_meses.groupby("Mes").agg({
+            "Valor": lambda x: df_ultimos_meses.loc[x.index, df_ultimos_meses["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum() - df_ultimos_meses.loc[x.index, df_ultimos_meses["Tipo"] == "Despesa"]["Valor"].sum()
+        }).reset_index()
+        
+        # Separar receitas e despesas
+        receitas_mes = df_ultimos_meses[df_ultimos_meses["Tipo"].isin(["Salário","Subsídio Alimentação"])].groupby("Mes")["Valor"].sum().reset_index()
+        despesas_mes = df_ultimos_meses[df_ultimos_meses["Tipo"] == "Despesa"].groupby("Mes")["Valor"].sum().reset_index()
+        
+        # Criar gráfico de linhas
+        fig_evol = go.Figure()
+        fig_evol.add_trace(go.Scatter(x=receitas_mes["Mes"], y=receitas_mes["Valor"], name="Receitas", line=dict(color="green", width=3), fill='tozeroy', fillcolor='rgba(0,200,0,0.1)'))
+        fig_evol.add_trace(go.Scatter(x=despesas_mes["Mes"], y=despesas_mes["Valor"], name="Despesas", line=dict(color="red", width=3), fill='tozeroy', fillcolor='rgba(200,0,0,0.1)'))
+        
+        fig_evol.update_layout(
+            title="Receitas vs Despesas (Últimos 6 meses)",
+            xaxis_title="Mês",
+            yaxis_title="Valor (€)",
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig_evol, use_container_width=True)
+    else:
+        st.info("Sem dados suficientes para mostrar evolução.")
+    
+    st.markdown("---")
+    
+    # === Dados por pessoa ===
+    st.markdown("### 👤 Por Pessoa")
+    
+    pessoa_toggle = st.radio("Ver:", ["Ambos", "Ruben", "Gabi"], horizontal=True)
+    
+    for pessoa_nome in ["Ruben", "Gabi"]:
+        if pessoa_toggle == "Ambos" or pessoa_toggle == pessoa_nome:
+            df_pessoa = df_mes_atual[df_mes_atual["Pessoa"] == pessoa_nome]
+            
+            receitas_p = df_pessoa[df_pessoa["Tipo"].isin(["Salário","Subsídio Alimentação"])]["Valor"].sum()
+            despesas_p = df_pessoa[df_pessoa["Tipo"] == "Despesa"]["Valor"].sum()
+            saldo_p = receitas_p - despesas_p
+            
+            with st.expander(f"{avatars.get(pessoa_nome, '👤')} {pessoa_nome} - Este Mês"):
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Receitas", f"{receitas_p:,.0f} €")
+                c2.metric("Despesas", f"{despesas_p:,.0f} €")
+                c3.metric("Saldo", f"{saldo_p:,.0f} €", delta_color="normal" if saldo_p >= 0 else "inverse")
+    
+    st.stop()
 
 # =========================
 # CASAL
@@ -275,6 +455,13 @@ if modo == "Casal 👨‍❤️‍👩":
     for pessoa in ["Ruben", "Gabi"]:
 
         st.markdown(f"### {avatars[pessoa]} {pessoa}")
+        
+        # Mostrar data do último salário
+        last_salary_date = get_last_salary(df_filtrado, pessoa)
+        if last_salary_date:
+            st.caption(f"📅 Ciclo desde: {last_salary_date.strftime('%d-%m-%Y')}")
+        else:
+            st.caption("📅 Sem registo de salário")
 
         df_p = filtrar_ciclo(df_filtrado, pessoa)
 
@@ -375,7 +562,7 @@ if modo == "Metas 🎯":
 
     st.subheader("🎯 Metas")
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=60)
     def load_goals():
         raw = goal_sheet.get_all_values()
         return pd.DataFrame(raw[1:], columns=raw[0]) if len(raw) > 1 else pd.DataFrame()
@@ -400,6 +587,26 @@ if modo == "Metas 🎯":
         
         st.markdown("### 📈 Progresso das Metas")
         
+        # Gráfico de barras
+        if not goals.empty:
+            goals_plot = goals.copy()
+            goals_plot['Progresso'] = goals_plot.apply(
+                lambda x: min((float(x.get('Atual', 0)) / float(x.get('Objetivo', 1)) * 100), 100) 
+                if float(x.get('Objetivo', 0)) > 0 else 0, 
+                axis=1
+            )
+            fig_bar = px.bar(
+                goals_plot, 
+                x='Meta', 
+                y='Progresso',
+                title="Progresso das Metas (%)",
+                color='Progresso',
+                color_continuous_scale='Greens',
+                range_y=[0, 100]
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        # Barras de progresso individuais
         for _, goal in goals.iterrows():
             objetivo = float(goal.get('Objetivo', 0))
             atual = float(goal.get('Atual', 0))
@@ -574,6 +781,8 @@ if modo == "Análises 📊":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="export_excel"
         )
+    
+    st.info("💡 Os ficheiros exportados contêm apenas os dados filtrados atualmente.")
 
     st.stop()
 
@@ -619,7 +828,8 @@ with st.form("adicionar_registo", clear_on_submit=True):
         key="valor_input"
     )
     
-    data = st.date_input("Data", datetime.today(), key="data_input")
+    # Data máxima = hoje (não permite datas futuras)
+    data = st.date_input("Data", datetime.today(), max_value=datetime.today().date(), key="data_input")
     
     # Botão de submeter
     submitted = st.form_submit_button("✅ Adicionar", use_container_width=True)
