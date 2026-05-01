@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide",
     page_icon="💰"
 )
-st.title("💰 Controlo Financeiro PRO")
+st.title("💰 Gestão Financeira")
 
 # =========================
 # SESSION STATE
