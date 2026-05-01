@@ -725,3 +725,27 @@ if submitted:
 # Info de cache (debug opcional)
 with st.sidebar.expander("ℹ️ Info"):
     st.caption("Dados em cache por 1 minuto para evitar exceder limites da API Google")
+
+    # Mostrar e-mail da conta de serviço para facilitar compartilhamento
+    try:
+        service_account_email = st.secrets["google_service_account"]["client_email"]
+        st.markdown("**📧 Conta de serviço:**")
+        st.code(service_account_email, language=None)
+        st.caption("Copie este e-mail e partilhe a planilha do Google Sheets com ele (permissão de editor).")
+    except Exception:
+        st.caption("E-mail da conta de serviço não disponível.")
+
+    # Mostrar ID da planilha
+    st.markdown("**📄 ID da Planilha:**")
+    st.code(SHEET_ID, language=None)
+    st.caption("Verifique se este ID corresponde à sua planilha do Google Sheets.")
+
+    # Instruções de diagnóstico
+    st.markdown("**🔧 Diagnóstico:**")
+    st.markdown("""
+    1. Abra a planilha no Google Sheets
+    2. Clique em "Compartilhar"
+    3. Cole o e-mail acima e dê permissão de "Editor"
+    4. Verifique se o ID da planilha está correto
+    """)
+
