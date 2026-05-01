@@ -150,13 +150,10 @@ def load_data():
     df = pd.DataFrame(raw[1:], columns=raw[0])
 
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
-    # Converter Data e manter apenas a parte da data (sem hora)
-    # Primeiro converter para datetime, ignorando erros
+    # Converter Data para datetime
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
     # Remover linhas com Data inválida (NaT)
     df = df[df["Data"].notna()]
-    # Converter para date
-    df["Data"] = df["Data"].dt.date
     # Ordenar por data decrescente
     df = df.sort_values("Data", ascending=False).reset_index(drop=True)
 
