@@ -81,7 +81,7 @@ SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
-SHEET_ID = "1-kZgk9Xw2fmMkswPJJVl3eiuMF9g8nJuIJo6UX9XME"
+SHEET_ID = "1-kZgk9Xw2fmMkswPJJVlL3eiuMF9g8nJuIJo6UX9XME"
 SHEET_HEADERS = ["ID", "Pessoa", "Tipo", "Categoria", "Descrição", "Valor", "Data"]
 
 try:
