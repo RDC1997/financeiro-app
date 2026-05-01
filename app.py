@@ -93,7 +93,12 @@ try:
     client = gspread.authorize(creds)
     workbook = client.open_by_key(SHEET_ID)
     sheet = workbook.sheet1
-    cat_sheet = workbook.worksheet("Categorias")
+
+    try:
+        cat_sheet = workbook.worksheet("Categorias")
+    except Exception:
+        cat_sheet = workbook.add_worksheet("Categorias", rows=100, cols=1)
+        cat_sheet.append_row(["Categoria"])
 
     try:
         goal_sheet = workbook.worksheet("Metas")
@@ -102,7 +107,19 @@ try:
         goal_sheet.append_row(["Meta", "Objetivo", "Atual"])
 
 except Exception as e:
-    st.error(f"Erro Google Sheets: {e}")
+    mensagem = str(e)
+    if "404" in mensagem or "Not Found" in mensagem:
+        st.error(
+            "Erro Google Sheets: Planilha não encontrada ou conta de serviço sem acesso. "
+            "Verifique o ID da planilha e partilhe-a com o e-mail da conta de serviço."
+        )
+    elif "403" in mensagem or "Forbidden" in mensagem:
+        st.error(
+            "Erro Google Sheets: Acesso negado. "
+            "Verifique se a conta de serviço tem permissões na planilha."
+        )
+    else:
+        st.error(f"Erro Google Sheets: {mensagem}")
     st.stop()
 
 # =========================
