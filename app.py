@@ -508,3 +508,4 @@ def render_sidebar_info():
         3. Cole o e-mail acima e dê permissão de "Editor"
         4. Verifique se o ID da planilha está correto
         """)
+    
