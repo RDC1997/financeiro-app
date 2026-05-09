@@ -15,52 +15,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# garantir estado
+# =========================
+# STATE
+# =========================
 if "page" not in st.session_state:
     st.session_state.page = "Casal"
-
-
-# =========================
-# NAVIGATION CARDS
-# =========================
-def nav_card(title, emoji, page_key):
-    selected = st.session_state.page == page_key
-
-    style = f"""
-        border: 2px solid {'#4CAF50' if selected else '#ddd'};
-        padding: 20px;
-        border-radius: 12px;
-        cursor: pointer;
-        text-align: center;
-        background-color: {'#f0fff4' if selected else 'white'};
-    """
-
-    if st.button(f"{emoji} {title}", key=page_key):
-        st.session_state.page = page_key
-
-    st.markdown(f"<div style='{style}'></div>", unsafe_allow_html=True)
-
-
-# =========================
-# HEADER NAVIGATION
-# =========================
-def render_menu():
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    with col1:
-        nav_card("Casal", "👨‍❤️‍👩", "Casal")
-
-    with col2:
-        nav_card("Ruben", "🤴", "Ruben")
-
-    with col3:
-        nav_card("Gabi", "👸", "Gabi")
-
-    with col4:
-        nav_card("Metas", "🎯", "Metas")
-
-    with col5:
-        nav_card("Análises", "📊", "Analises")
 
 
 # =========================
@@ -73,10 +32,30 @@ if not df.empty:
 
 
 # =========================
+# NAVIGATION (CARTÕES)
+# =========================
+def render_nav():
+    pages = [
+        ("Casal", "👨‍❤️‍👩"),
+        ("Ruben", "🤴"),
+        ("Gabi", "👸"),
+        ("Metas", "🎯"),
+        ("Análises", "📊"),
+    ]
+
+    cols = st.columns(len(pages))
+
+    for col, (name, icon) in zip(cols, pages):
+        with col:
+            if st.button(f"{icon} {name}", use_container_width=True):
+                st.session_state.page = name
+
+
+# =========================
 # CASAL
 # =========================
-def page_casal():
-    st.title("👨‍❤️‍👩 Visão Geral do Casal")
+def render_casal_mode(df):
+    st.subheader("👨‍❤️‍👩 Casal")
 
     receitas = df[df["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
     despesas = df[df["Tipo"] == "Despesa"]
@@ -84,55 +63,49 @@ def page_casal():
     total_r = receitas["Valor"].sum()
     total_d = despesas["Valor"].sum()
 
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Receitas", f"{total_r:.2f} €")
-    col2.metric("Despesas", f"{total_d:.2f} €")
-    col3.metric("Saldo", f"{total_r - total_d:.2f} €")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Receitas", f"{total_r:.2f} €")
+    c2.metric("Despesas", f"{total_d:.2f} €")
+    c3.metric("Saldo", f"{total_r - total_d:.2f} €")
 
     st.divider()
-
     st.dataframe(df.tail(10), use_container_width=True)
 
 
 # =========================
-# ROD
+# PESSOA
 # =========================
-def page_person(name, emoji):
-    st.title(f"{emoji} {name}")
+def render_individual_mode(pessoa, df):
+    st.subheader(pessoa)
 
-    df_p = df[df["Pessoa"] == name]
-
-    col1, col2, col3 = st.columns(3)
+    df_p = df[df["Pessoa"] == pessoa]
 
     receitas = df_p[df_p["Tipo"].isin(["Salário", "Subsídio Alimentação"])]
     despesas = df_p[df_p["Tipo"] == "Despesa"]
 
-    col1.metric("Receitas", f"{receitas['Valor'].sum():.2f} €")
-    col2.metric("Despesas", f"{despesas['Valor'].sum():.2f} €")
-    col3.metric("Saldo", f"{receitas['Valor'].sum() - despesas['Valor'].sum():.2f} €")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Receitas", f"{receitas['Valor'].sum():.2f} €")
+    c2.metric("Despesas", f"{despesas['Valor'].sum():.2f} €")
+    c3.metric("Saldo", f"{receitas['Valor'].sum() - despesas['Valor'].sum():.2f} €")
 
     st.divider()
-
     st.dataframe(df_p.tail(10), use_container_width=True)
 
 
 # =========================
-# METAS
+# METAS (placeholder sem remover tua lógica futura)
 # =========================
-def page_metas():
-    st.title("🎯 Metas")
-
-    st.info("Aqui podes integrar a tua lógica atual de metas")
-
+def render_metas_mode():
+    st.subheader("🎯 Metas")
+    st.info("Secção de metas (mantida para integração futura)")
     st.dataframe(df)
 
 
 # =========================
 # ANALISES
 # =========================
-def page_analises():
-    st.title("📊 Análises")
+def render_analises_mode(df):
+    st.subheader("📊 Análises")
 
     if df.empty:
         st.warning("Sem dados")
@@ -151,23 +124,26 @@ def page_analises():
 
 
 # =========================
-# ROUTER
+# NAV BAR
 # =========================
-render_menu()
-
+render_nav()
 st.divider()
 
+
+# =========================
+# ROUTER
+# =========================
 if st.session_state.page == "Casal":
-    page_casal()
+    render_casal_mode(df)
 
 elif st.session_state.page == "Ruben":
-    page_person("Ruben", "🤴")
+    render_individual_mode("Ruben", df)
 
 elif st.session_state.page == "Gabi":
-    page_person("Gabi", "👸")
+    render_individual_mode("Gabi", df)
 
 elif st.session_state.page == "Metas":
-    page_metas()
+    render_metas_mode()
 
-elif st.session_state.page == "Analises":
-    page_analises()
+elif st.session_state.page == "Análises":
+    render_analises_mode(df)
