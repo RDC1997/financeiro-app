@@ -33,16 +33,8 @@ st.set_page_config(page_title="Finance App", layout="wide")
 if "confirm_delete" not in st.session_state:
     st.session_state.confirm_delete = None
 
-
-# =========================
-# SIDEBAR INFO
-# =========================
-
-def render_sidebar_info():
-    with st.sidebar.expander("ℹ️ Info"):
-        st.caption("Dados em cache por 1 minuto")
-        st.markdown("**📄 ID da Planilha:**")
-        st.code(SHEET_ID)
+if "page" not in st.session_state:
+    st.session_state.page = "Casal"
 
 
 # =========================
@@ -76,6 +68,15 @@ def render_sidebar_categories(categories, df):
 
 
 # =========================
+# NAVIGATION (CARDS)
+# =========================
+
+def nav_button(label):
+    if st.sidebar.button(label, use_container_width=True):
+        st.session_state.page = label
+
+
+# =========================
 # FILTERS (FIX DATETIME)
 # =========================
 
@@ -87,7 +88,6 @@ def render_filters(df):
     ]
 
     df_temp = df.copy()
-
     df_temp["Data"] = pd.to_datetime(df_temp["Data"], errors="coerce")
 
     anos_disponiveis = sorted(
@@ -146,7 +146,7 @@ def render_delete_section(df_p):
 
 
 # =========================
-# INDIVIDUAL MODE (FIXED UI LOGIC)
+# INDIVIDUAL MODE (FIXED UI)
 # =========================
 
 def render_individual_mode(pessoa, categories, df):
@@ -154,7 +154,6 @@ def render_individual_mode(pessoa, categories, df):
     avatars = {"Ruben": "🤴", "Gabi": "👸"}
     st.subheader(f"{avatars.get(pessoa)} {pessoa}")
 
-    # ---------------- INPUTS DINÂMICOS ----------------
     tipo = st.selectbox(
         "Tipo",
         ["Salário", "Subsídio Alimentação", "Despesa"]
@@ -163,7 +162,6 @@ def render_individual_mode(pessoa, categories, df):
     categoria = None
     descricao = ""
 
-    # IMPORTANTE: aparece imediatamente ao mudar "Despesa"
     if tipo == "Despesa":
 
         categoria = st.selectbox(
@@ -177,7 +175,6 @@ def render_individual_mode(pessoa, categories, df):
     valor = st.number_input("Valor (€)", min_value=0.0)
     data = st.date_input("Data", datetime.today())
 
-    # ---------------- SUBMIT ----------------
     if st.button("Adicionar"):
 
         erros = []
@@ -189,10 +186,10 @@ def render_individual_mode(pessoa, categories, df):
         if tipo == "Despesa":
 
             if not categoria:
-                erros.append("Seleciona uma categoria")
+                erros.append("Seleciona categoria")
 
             if categoria == "Outros" and not descricao.strip():
-                erros.append("Descrição obrigatória para 'Outros'")
+                erros.append("Descrição obrigatória")
 
         if erros:
             for e in erros:
@@ -223,7 +220,7 @@ def render_individual_mode(pessoa, categories, df):
 
 def render_casal_mode(df):
 
-    st.subheader("Casal")
+    st.subheader("👨‍❤️‍👩 Casal")
 
     receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]
     despesas = df[df["Tipo"] == "Despesa"]
@@ -232,13 +229,15 @@ def render_casal_mode(df):
 
     c1.metric("Receitas", f"{receitas['Valor'].sum()} €")
     c2.metric("Despesas", f"{despesas['Valor'].sum()} €")
-    c3.metric("Saldo", f"{receitas['Valor'].sum() - despesas['Valor'].sum()} €")
+    c3.metric("Saldo", f"{receitas['Valor'].sum()-despesas['Valor'].sum()} €")
 
     st.markdown("---")
 
-    for pessoa in ["Ruben", "Gabi"]:
-        st.markdown(f"## {pessoa}")
-        render_delete_section(df[df["Pessoa"] == pessoa])
+    st.markdown("## Ruben")
+    render_delete_section(df[df["Pessoa"] == "Ruben"])
+
+    st.markdown("## Gabi")
+    render_delete_section(df[df["Pessoa"] == "Gabi"])
 
     st.stop()
 
@@ -249,7 +248,7 @@ def render_casal_mode(df):
 
 def render_metas_mode():
 
-    st.subheader("Metas")
+    st.subheader("🎯 Metas")
 
     goals = load_goals()
 
@@ -272,7 +271,7 @@ def render_metas_mode():
 
 def render_analises_mode(df):
 
-    st.subheader("Análises")
+    st.subheader("📊 Análises")
 
     receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]
     despesas = df[df["Tipo"] == "Despesa"]
@@ -287,29 +286,34 @@ def render_analises_mode(df):
 # MAIN
 # =========================
 
-st.title("Finance App")
+st.title("💰 Finance App")
 
 df = load_data()
 categorias = st.session_state.get("categories", [])
 
-render_sidebar_info()
 render_sidebar_categories(categorias, df)
 
-modo = st.sidebar.radio("Modo", ["Ruben", "Gabi", "Casal", "Metas", "Análises"])
+st.sidebar.markdown("## Navegação")
+
+nav_button("Casal")
+nav_button("Ruben")
+nav_button("Gabi")
+nav_button("Metas")
+nav_button("Análises")
 
 df_filtrado = render_filters(df)
 
-if modo == "Ruben":
-    render_individual_mode("Ruben", categorias, df_filtrado)
-
-elif modo == "Gabi":
-    render_individual_mode("Gabi", categorias, df_filtrado)
-
-elif modo == "Casal":
+if st.session_state.page == "Casal":
     render_casal_mode(df_filtrado)
 
-elif modo == "Metas":
+elif st.session_state.page == "Ruben":
+    render_individual_mode("Ruben", categorias, df_filtrado)
+
+elif st.session_state.page == "Gabi":
+    render_individual_mode("Gabi", categorias, df_filtrado)
+
+elif st.session_state.page == "Metas":
     render_metas_mode()
 
-elif modo == "Análises":
+elif st.session_state.page == "Análises":
     render_analises_mode(df_filtrado)
