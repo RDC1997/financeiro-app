@@ -1,99 +1,102 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime
+from utils import (
+    export_to_excel,
+    refresh,
+    validate_value,
+    validate_category,
+    generate_id
+)
+
+from data import (
+    load_data,
+    add_category,
+    delete_category,
+    aplicar_filtros,
+    load_goals,
+    add_goal,
+    update_goal,
+    delete_goal,
+    sheet,
+    SHEET_ID
+)
 
 # =========================
-# SAFE IMPORTS
+# CONFIG
 # =========================
 
-# Export Excel
-try:
-    from utils import export_to_excel
-except Exception:
-    from io import BytesIO
+st.set_page_config(
+    page_title="Finance App",
+    layout="wide"
+)
 
-    def export_to_excel(df):
-        output = BytesIO()
-
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Dados')
-
-        return output.getvalue()
-
-# Load Data
-try:
-    from data import load_data
-except Exception:
-
-    @st.cache_data(ttl=60)
-    def load_data():
-        return pd.DataFrame(columns=[
-            "ID",
-            "Pessoa",
-            "Tipo",
-            "Categoria",
-            "Descrição",
-            "Valor",
-            "Data"
-        ])
+if "confirm_delete" not in st.session_state:
+    st.session_state.confirm_delete = None
 
 # =========================
-# UI COMPONENTS
+# SIDEBAR CATEGORIES
 # =========================
 
 def render_sidebar_categories(categories, df):
+
     st.sidebar.markdown("## ⚙️ Categorias")
 
     with st.sidebar.expander("➕ Adicionar categoria"):
-        new_cat = st.text_input("Nova categoria", key="new_cat_input")
+
+        new_cat = st.text_input(
+            "Nova categoria",
+            key="new_cat_input"
+        )
 
         if st.button("Adicionar categoria", key="add_cat"):
+
             if new_cat.strip():
 
-                try:
-                    from data import add_category
-                    add_category(new_cat.strip())
-
-                    from utils import refresh
-                    refresh()
-
-                except Exception as e:
-                    st.error(f"Erro ao adicionar categoria: {e}")
+                add_category(new_cat.strip())
+                refresh()
 
     with st.sidebar.expander("❌ Remover categoria"):
 
         if categories:
+
             cat_del = st.selectbox(
                 "Escolher",
                 categories,
                 key="cat_del_select"
             )
 
-            if st.button("Remover categoria", key="del_cat"):
+            if st.button(
+                "Remover categoria",
+                key="del_cat"
+            ):
 
-                try:
-                    from data import delete_category
-                    delete_category(cat_del)
-
-                    from utils import refresh
-                    refresh()
-
-                except Exception as e:
-                    st.error(f"Erro ao remover categoria: {e}")
+                delete_category(cat_del)
+                refresh()
 
     with st.sidebar.expander("📋 Ver categorias"):
 
         if categories:
-            contagem = df[df["Tipo"] == "Despesa"].groupby('Categoria').size()
+
+            contagem = (
+                df[df["Tipo"] == "Despesa"]
+                .groupby("Categoria")
+                .size()
+            )
 
             for cat in categories:
+
                 qtd = contagem.get(cat, 0)
                 st.write(f"• {cat}: {qtd} registos")
+
         else:
             st.write("Sem categorias")
 
+
+# =========================
+# FILTERS
+# =========================
 
 def render_filters(df):
 
@@ -101,10 +104,11 @@ def render_filters(df):
     st.sidebar.markdown("## 🔍 Filtros")
 
     try:
+
         anos_disponiveis = sorted(
             df["Data"].dt.year.unique().tolist(),
             reverse=True
-        ) if not df.empty and "Data" in df.columns else [datetime.now().year]
+        )
 
     except:
         anos_disponiveis = [datetime.now().year]
@@ -127,212 +131,481 @@ def render_filters(df):
 
     filtro_ano = st.sidebar.selectbox(
         "Ano",
-        ["Todos"] + anos_disponiveis,
-        key="filtro_ano",
-        index=0
+        ["Todos"] + anos_disponiveis
     )
 
     filtro_mes = st.sidebar.selectbox(
         "Mês",
-        meses,
-        key="filtro_mes",
-        index=0
+        meses
     )
 
     pesquisa = st.sidebar.text_input(
-        "🔎 Pesquisar",
-        key="pesquisa",
-        value=""
+        "🔎 Pesquisar"
     )
 
-    try:
-        from data import aplicar_filtros
-        df_filtrado = aplicar_filtros(
-            df,
-            filtro_ano,
-            filtro_mes,
-            pesquisa,
-            meses
-        )
-
-    except Exception:
-        df_filtrado = df
-
-    return df_filtrado
-
-
-def render_casal_mode(df_filtrado):
-
-    st.subheader("👨‍❤️‍👩 Casal - PRO 2 Inteligente")
-
-    def get_last_salary(df, pessoa):
-
-        df_p = df[
-            (df["Pessoa"] == pessoa)
-            & (df["Tipo"] == "Salário")
-        ]
-
-        if df_p.empty:
-            return None
-
-        return df_p.sort_values(
-            "Data",
-            ascending=False
-        ).iloc[0]["Data"]
-
-    def filtrar_ciclo(df, pessoa):
-
-        last_salary = get_last_salary(df, pessoa)
-
-        if last_salary:
-            return df[
-                (df["Pessoa"] == pessoa)
-                & (df["Data"] >= last_salary)
-            ]
-
-        return df[df["Pessoa"] == pessoa]
-
-    df_casal = df_filtrado.copy()
-
-    receitas_casal = df_casal[
-        df_casal["Tipo"].isin([
-            "Salário",
-            "Subsídio Alimentação"
-        ])
-    ]
-
-    despesas_casal = df_casal[
-        df_casal["Tipo"] == "Despesa"
-    ]
-
-    total_receitas_casal = receitas_casal["Valor"].sum()
-    total_despesas_casal = despesas_casal["Valor"].sum()
-
-    saldo_casal = (
-        total_receitas_casal
-        - total_despesas_casal
+    return aplicar_filtros(
+        df,
+        filtro_ano,
+        filtro_mes,
+        pesquisa,
+        meses
     )
 
-    st.markdown("### 💑 Totais do Casal")
 
-    c1, c2, c3 = st.columns(3)
+# =========================
+# DELETE SECTION
+# =========================
 
-    c1.metric(
-        "💰 Receitas",
-        f"{total_receitas_casal:.2f} €"
-    )
+def render_delete_section(df_p):
 
-    c2.metric(
-        "💸 Despesas",
-        f"{total_despesas_casal:.2f} €"
-    )
+    if df_p.empty:
+        st.info("Sem registos")
+        return
 
-    c3.metric(
-        "📊 Saldo",
-        f"{saldo_casal:.2f} €",
-        delta_color="normal"
-    )
+    st.markdown("### 🗑 Eliminar Registos")
 
-    st.markdown("---")
+    df_p_limited = df_p.tail(10)
+
+    for _, row in df_p_limited.iterrows():
+
+        with st.container():
+
+            c1, c2, c3, c4, c5 = st.columns([2,2,2,2,1])
+
+            c1.write(row["Tipo"])
+            c2.write(row["Categoria"])
+            c3.write(f"{row['Valor']:.2f} €")
+            c4.write(str(row["Data"]))
+
+            if st.session_state.confirm_delete == row["ID"]:
+
+                if c5.button("✓", key=f"confirm_{row['ID']}"):
+
+                    data = sheet.get_all_values()
+                    headers = data[0]
+
+                    id_index = headers.index("ID")
+
+                    for i, r in enumerate(data[1:], start=2):
+
+                        if r[id_index] == row["ID"]:
+                            sheet.delete_rows(i)
+                            break
+
+                    st.session_state.confirm_delete = None
+
+                    load_data.clear()
+                    refresh()
+
+            else:
+
+                if c5.button("🗑️", key=f"del_{row['ID']}"):
+
+                    st.session_state.confirm_delete = row["ID"]
+                    refresh()
+
+            st.divider()
+
+
+# =========================
+# INDIVIDUAL MODE
+# =========================
+
+def render_individual_mode(
+    pessoa,
+    categories,
+    df
+):
 
     avatars = {
         "Ruben": "🤴",
         "Gabi": "👸"
     }
 
-    for pessoa in ["Ruben", "Gabi"]:
+    st.subheader(
+        f"{avatars.get(pessoa,'👤')} {pessoa}"
+    )
 
-        st.markdown(f"### {avatars[pessoa]} {pessoa}")
+    with st.form(
+        "adicionar_registo",
+        clear_on_submit=True
+    ):
 
-        last_salary_date = get_last_salary(
-            df_filtrado,
-            pessoa
+        tipo = st.selectbox(
+            "Tipo",
+            [
+                "Salário",
+                "Subsídio Alimentação",
+                "Despesa"
+            ]
         )
 
-        if last_salary_date:
-            st.caption(
-                f"📅 Ciclo desde: "
-                f"{last_salary_date.strftime('%d-%m-%Y')}"
+        categoria = ""
+        descricao = ""
+
+        if tipo == "Despesa":
+
+            todas_categorias = (
+                categories + ["Outros"]
             )
 
+            categoria = st.selectbox(
+                "Categoria",
+                todas_categorias
+            )
+
+            if categoria == "Outros":
+
+                descricao = st.text_input(
+                    "Descrição"
+                )
+
+        valor = st.number_input(
+            "Valor (€)",
+            min_value=0.0
+        )
+
+        data = st.date_input(
+            "Data",
+            datetime.today()
+        )
+
+        submitted = st.form_submit_button(
+            "✅ Adicionar"
+        )
+
+    if submitted:
+
+        erros = []
+
+        erro_valor = validate_value(valor)
+
+        if erro_valor:
+            erros.append(erro_valor)
+
+        erro_cat = validate_category(
+            tipo,
+            categoria,
+            descricao
+        )
+
+        if erro_cat:
+            erros.append(erro_cat)
+
+        if erros:
+
+            for erro in erros:
+                st.error(erro)
+
         else:
-            st.caption("📅 Sem registo de salário")
 
-        df_p = filtrar_ciclo(df_filtrado, pessoa)
-
-        receitas = df_p[
-            df_p["Tipo"].isin([
-                "Salário",
-                "Subsídio Alimentação"
+            sheet.append_row([
+                generate_id(),
+                pessoa,
+                tipo,
+                categoria,
+                descricao,
+                float(valor),
+                str(data)
             ])
+
+            load_data.clear()
+
+            st.success("✅ Registo criado")
+
+            refresh()
+
+    st.markdown("---")
+
+    df_pessoa = df[df["Pessoa"] == pessoa]
+
+    render_delete_section(df_pessoa)
+
+
+# =========================
+# CASAL MODE
+# =========================
+
+def render_casal_mode(df_filtrado):
+
+    st.subheader("👨‍❤️‍👩 Casal")
+
+    receitas = df_filtrado[
+        df_filtrado["Tipo"].isin([
+            "Salário",
+            "Subsídio Alimentação"
+        ])
+    ]
+
+    despesas = df_filtrado[
+        df_filtrado["Tipo"] == "Despesa"
+    ]
+
+    total_receitas = receitas["Valor"].sum()
+    total_despesas = despesas["Valor"].sum()
+
+    saldo = total_receitas - total_despesas
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "💰 Receitas",
+        f"{total_receitas:.2f} €"
+    )
+
+    c2.metric(
+        "💸 Despesas",
+        f"{total_despesas:.2f} €"
+    )
+
+    c3.metric(
+        "📊 Saldo",
+        f"{saldo:.2f} €"
+    )
+
+    st.markdown("---")
+
+    for pessoa in ["Ruben", "Gabi"]:
+
+        st.markdown(f"## {pessoa}")
+
+        df_p = df_filtrado[
+            df_filtrado["Pessoa"] == pessoa
         ]
 
-        despesas = df_p[
-            df_p["Tipo"] == "Despesa"
-        ]
-
-        total_receitas = receitas["Valor"].sum()
-        total_despesas = despesas["Valor"].sum()
-
-        saldo = total_receitas - total_despesas
-
-        c1, c2, c3 = st.columns(3)
-
-        c1.metric(
-            "💰 Receitas",
-            f"{total_receitas:.2f} €"
+        st.dataframe(
+            df_p,
+            use_container_width=True
         )
-
-        c2.metric(
-            "💸 Despesas",
-            f"{total_despesas:.2f} €"
-        )
-
-        c3.metric(
-            "📊 Saldo",
-            f"{saldo:.2f} €"
-        )
-
-        with st.expander("💰 Receitas"):
-
-            if not receitas.empty:
-
-                df_show = receitas.drop(columns=["ID"])
-
-                if 'Data' in df_show.columns:
-                    df_show['Data'] = pd.to_datetime(
-                        df_show['Data']
-                    ).dt.strftime('%d-%m-%Y')
-
-                st.dataframe(
-                    df_show,
-                    use_container_width=True
-                )
-
-            else:
-                st.info("Sem receitas neste ciclo")
-
-        with st.expander("💸 Despesas"):
-
-            if not despesas.empty:
-
-                df_show = despesas.drop(columns=["ID"])
-
-                if 'Data' in df_show.columns:
-                    df_show['Data'] = pd.to_datetime(
-                        df_show['Data']
-                    ).dt.strftime('%d-%m-%Y')
-
-                st.dataframe(
-                    df_show,
-                    use_container_width=True
-                )
-
-            else:
-                st.info("Sem despesas neste ciclo")
 
         render_delete_section(df_p)
 
-        st.markdown("---")
+    st.stop()
+
+
+# =========================
+# METAS
+# =========================
+
+def render_metas_mode():
+
+    st.subheader("🎯 Metas")
+
+    goals = load_goals()
+
+    with st.expander("➕ Criar meta"):
+
+        nome = st.text_input("Nome")
+
+        objetivo = st.number_input(
+            "Objetivo (€)",
+            min_value=0.0
+        )
+
+        if st.button("Criar"):
+
+            if nome.strip() and objetivo > 0:
+
+                add_goal(nome, objetivo)
+                refresh()
+
+    if goals.empty:
+
+        st.info("Sem metas")
+
+    else:
+
+        st.dataframe(
+            goals,
+            use_container_width=True
+        )
+
+        for _, goal in goals.iterrows():
+
+            objetivo = float(goal["Objetivo"])
+            atual = float(goal["Atual"])
+
+            progresso = (
+                atual / objetivo
+            ) * 100 if objetivo > 0 else 0
+
+            st.progress(
+                int(min(progresso,100)),
+                text=f"{goal['Meta']} "
+                f"({progresso:.1f}%)"
+            )
 
     st.stop()
+
+
+# =========================
+# ANALISES
+# =========================
+
+def render_analises_mode(df):
+
+    st.subheader("📊 Resumo Financeiro")
+
+    if df.empty:
+
+        st.info("Sem dados")
+        st.stop()
+
+    receitas = df[
+        df["Tipo"].isin([
+            "Salário",
+            "Subsídio Alimentação"
+        ])
+    ]
+
+    despesas = df[
+        df["Tipo"] == "Despesa"
+    ]
+
+    total_receitas = receitas["Valor"].sum()
+    total_despesas = despesas["Valor"].sum()
+
+    saldo = total_receitas - total_despesas
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "Receitas",
+        f"{total_receitas:.2f} €"
+    )
+
+    c2.metric(
+        "Despesas",
+        f"{total_despesas:.2f} €"
+    )
+
+    c3.metric(
+        "Saldo",
+        f"{saldo:.2f} €"
+    )
+
+    st.markdown("---")
+
+    if not despesas.empty:
+
+        despesa_categoria = (
+            despesas.groupby("Categoria")["Valor"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+
+        fig = px.pie(
+            values=despesa_categoria.values,
+            names=despesa_categoria.index,
+            title="Despesas por Categoria"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    st.markdown("---")
+
+    csv = df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        "📄 Exportar CSV",
+        csv,
+        "finance.csv",
+        "text/csv"
+    )
+
+    excel_data = export_to_excel(df)
+
+    st.download_button(
+        "📊 Exportar Excel",
+        excel_data,
+        "finance.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    st.stop()
+
+
+# =========================
+# SIDEBAR INFO
+# =========================
+
+def render_sidebar_info():
+
+    with st.sidebar.expander("ℹ️ Info"):
+
+        st.caption(
+            "Dados em cache por 1 minuto"
+        )
+
+        st.markdown("**📄 ID da Planilha:**")
+        st.code(SHEET_ID)
+
+        st.markdown(
+            """
+            1. Abra a planilha
+            2. Compartilhe
+            3. Dê acesso de editor
+            """
+        )
+
+
+# =========================
+# MAIN
+# =========================
+
+st.title("💰 Finance App")
+
+df = load_data()
+
+categorias = st.session_state.categories
+
+render_sidebar_info()
+
+render_sidebar_categories(
+    categorias,
+    df
+)
+
+modo = st.sidebar.radio(
+    "Modo",
+    [
+        "Ruben",
+        "Gabi",
+        "Casal",
+        "Metas",
+        "Análises"
+    ]
+)
+
+df_filtrado = render_filters(df)
+
+if modo == "Ruben":
+
+    render_individual_mode(
+        "Ruben",
+        categorias,
+        df_filtrado
+    )
+
+elif modo == "Gabi":
+
+    render_individual_mode(
+        "Gabi",
+        categorias,
+        df_filtrado
+    )
+
+elif modo == "Casal":
+
+    render_casal_mode(df_filtrado)
+
+elif modo == "Metas":
+
+    render_metas_mode()
+
+elif modo == "Análises":
+
+    render_analises_mode(df_filtrado)
