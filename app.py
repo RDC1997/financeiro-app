@@ -74,7 +74,7 @@ def render_sidebar_categories(categories, df):
 
 
 # =========================
-# FILTERS
+# FILTERS (FIX DATETIME ERROR)
 # =========================
 
 def render_filters(df):
@@ -84,11 +84,29 @@ def render_filters(df):
         "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"
     ]
 
-    filtro_ano = st.sidebar.selectbox("Ano", ["Todos"] + sorted(df["Data"].dt.year.unique().tolist(), reverse=True))
-    filtro_mes = st.sidebar.selectbox("Mês", meses)
+    df_temp = df.copy()
+
+    # FIX CRÍTICO: garantir datetime válido
+    df_temp["Data"] = pd.to_datetime(df_temp["Data"], errors="coerce")
+
+    anos_disponiveis = sorted(
+        df_temp["Data"].dropna().dt.year.unique().tolist(),
+        reverse=True
+    )
+
+    filtro_ano = st.sidebar.selectbox(
+        "Ano",
+        ["Todos"] + anos_disponiveis
+    )
+
+    filtro_mes = st.sidebar.selectbox(
+        "Mês",
+        meses
+    )
+
     pesquisa = st.sidebar.text_input("Pesquisar")
 
-    return aplicar_filtros(df, filtro_ano, filtro_mes, pesquisa, meses)
+    return aplicar_filtros(df_temp, filtro_ano, filtro_mes, pesquisa, meses)
 
 
 # =========================
@@ -116,6 +134,7 @@ def render_delete_section(df_p):
 
                 data = sheet.get_all_values()
                 headers = data[0]
+
                 idx = headers.index("ID")
 
                 for i, r in enumerate(data[1:], start=2):
@@ -135,7 +154,7 @@ def render_delete_section(df_p):
 
 
 # =========================
-# INDIVIDUAL MODE (FIXED)
+# INDIVIDUAL MODE (DESPESA FIXED UX)
 # =========================
 
 def render_individual_mode(pessoa, categories, df):
@@ -143,7 +162,6 @@ def render_individual_mode(pessoa, categories, df):
     avatars = {"Ruben": "🤴", "Gabi": "👸"}
     st.subheader(f"{avatars.get(pessoa)} {pessoa}")
 
-    # ---------------- FORM ----------------
     with st.form("form", clear_on_submit=True):
 
         tipo = st.selectbox(
@@ -154,7 +172,7 @@ def render_individual_mode(pessoa, categories, df):
         categoria = None
         descricao = ""
 
-        # -------- DESPESA LOGIC --------
+        # DESPESA LOGIC
         if tipo == "Despesa":
 
             categoria = st.selectbox(
@@ -170,7 +188,6 @@ def render_individual_mode(pessoa, categories, df):
 
         submitted = st.form_submit_button("Adicionar")
 
-    # ---------------- VALIDATION ----------------
     if submitted:
 
         erros = []
@@ -190,7 +207,6 @@ def render_individual_mode(pessoa, categories, df):
         if erros:
             for e in erros:
                 st.error(e)
-
         else:
 
             sheet.append_row([
@@ -204,7 +220,7 @@ def render_individual_mode(pessoa, categories, df):
             ])
 
             load_data.clear()
-            st.success("Registado")
+            st.success("Registo adicionado")
             refresh()
 
     st.markdown("---")
@@ -222,11 +238,11 @@ def render_casal_mode(df):
     receitas = df[df["Tipo"].isin(["Salário","Subsídio Alimentação"])]
     despesas = df[df["Tipo"] == "Despesa"]
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    col1.metric("Receitas", f"{receitas['Valor'].sum()} €")
-    col2.metric("Despesas", f"{despesas['Valor'].sum()} €")
-    col3.metric("Saldo", f"{receitas['Valor'].sum()-despesas['Valor'].sum()} €")
+    c1.metric("Receitas", f"{receitas['Valor'].sum()} €")
+    c2.metric("Despesas", f"{despesas['Valor'].sum()} €")
+    c3.metric("Saldo", f"{receitas['Valor'].sum()-despesas['Valor'].sum()} €")
 
     st.markdown("---")
 
@@ -284,6 +300,7 @@ def render_analises_mode(df):
 st.title("Finance App")
 
 df = load_data()
+
 categorias = st.session_state.get("categories", [])
 
 render_sidebar_info()
